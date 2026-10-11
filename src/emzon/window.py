@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -89,6 +90,9 @@ class MainWindow(QMainWindow):
         self._resume_after_scrub = False
         self._resume_after_load = False
         self._playing: Path | None = None
+        # Direction to keep going when a clip reached by browsing turns out unreadable; 0 means show the error.
+        self._skip = 0
+        self._loading_failed: Path | None = None
 
         self.tasks = Tasks(self)
         self.tasks.finished.connect(self._on_task)
@@ -130,7 +134,9 @@ class MainWindow(QMainWindow):
         middle = QHBoxLayout()
         middle.setContentsMargins(0, 0, 0, 0)
         middle.setSpacing(0)
-        self.folder_panel = FolderPanel()
+        self.panel_thumbnails = Thumbnails(self, height=180)
+        self.folder_panel = FolderPanel(self.panel_thumbnails)
+        self.panel_thumbnails.ready.connect(self.folder_panel.list.viewport().update)
         self.folder_panel.open_requested.connect(self._open_from_panel)
         middle.addWidget(self.folder_panel)
         middle.addWidget(self._build_stage(), 1)
@@ -257,18 +263,22 @@ class MainWindow(QMainWindow):
 
         message = QWidget()
         column = QVBoxLayout(message)
-        column.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        column.setContentsMargins(48, 0, 48, 0)
         self.message_title = QLabel()
         self.message_title.setFont(theme.ui_font(18, QFont.Weight.DemiBold))
-        self.message_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.message_detail = QLabel()
-        self.message_detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.message_detail.setWordWrap(True)
-        self.message_detail.setMaximumWidth(560)
         self.message_detail.setStyleSheet(f"color: {theme.MUTED.name()};")
+        self.message_detail.setFont(theme.ui_font(14))
+        for label in (self.message_title, self.message_detail):
+            # Wrapped labels added without a layout alignment get the height their text needs.
+            label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+            label.setWordWrap(True)
+            label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        column.addStretch(1)
         column.addWidget(self.message_title)
-        column.addSpacing(8)
-        column.addWidget(self.message_detail, 0, Qt.AlignmentFlag.AlignCenter)
+        column.addSpacing(10)
+        column.addWidget(self.message_detail)
+        column.addStretch(1)
         self.message_page = message
 
         for page in (self.empty_page, self.video_page, self.message_page):
@@ -401,16 +411,17 @@ class MainWindow(QMainWindow):
         self.playlist = playlist
         self.preferences.last_folder = playlist.current.parent
         settings.save(self.preferences)
-        self._open_clip(playlist.current)
+        self._open_clip(playlist.current, skip=1 if path.is_dir() else 0)
 
     def step_clip(self, delta: int) -> None:
         if self.playlist is None:
             return
         target = self.playlist.step(delta)
         if target is not None:
-            self._open_clip(target)
+            self._open_clip(target, skip=delta)
 
-    def _open_clip(self, path: Path) -> None:
+    def _open_clip(self, path: Path, skip: int = 0) -> None:
+        self._skip = skip
         self._remember()
         tools.stop_group(WAVEFORM_GROUP)
         tools.stop_group(proxy.GROUP)
@@ -418,11 +429,23 @@ class MainWindow(QMainWindow):
         self._player_ready = False
         self._playing = None
         self._loading_path = path
+        self._loading_failed = path
         self.player.set_paused(True)
         self.file_label.setText(path.name)
         self._update_navigation()
         self._loading_timer.start()
         self.tasks.submit(("probe", self._generation), probe, path)
+
+    def _skip_unreadable(self) -> bool:
+        """While browsing, leave an unreadable clip out and go on to the next one."""
+        if not self._skip or self.playlist is None or self._loading_failed is None:
+            return False
+        following = self.playlist.drop(self._loading_failed, self._skip)
+        if following is None:
+            self.playlist = None
+            return False
+        self._open_clip(following, skip=self._skip)
+        return True
 
     def _show_loading(self) -> None:
         if self._loading_path is not None:
@@ -437,7 +460,8 @@ class MainWindow(QMainWindow):
             self._loading_path = None
             if error:
                 log.warning("cannot open %s: %s", self.file_label.text(), error)
-                self._show_open_error(error)
+                if not self._skip_unreadable():
+                    self._show_open_error(error)
             else:
                 self._load(result)
         elif kind == "waveform":
@@ -542,6 +566,10 @@ class MainWindow(QMainWindow):
             log.info("cannot describe %s: %s", path.name, error)
             result = (None, None)
         self._library[path] = result
+        if result[0] is None and self.playlist is not None and path != self.playlist.current:
+            self.playlist.drop(path)
+            self._update_navigation()
+            return
         self.folder_panel.set_detail(path, *result)
 
     def _open_from_panel(self, path: Path) -> None:
@@ -581,6 +609,7 @@ class MainWindow(QMainWindow):
         else:
             detail = strings.UNREADABLE
         self._show_message(strings.OPEN_FAILED.format(name=self.file_label.text()), detail, error=True)
+        self._update_navigation()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -900,6 +929,7 @@ class MainWindow(QMainWindow):
         settings.save_window_geometry(self.saveGeometry())
         self.queue.shutdown()
         self.thumbnails.shutdown()
+        self.panel_thumbnails.shutdown()
         self.tasks.shutdown()
         self.library_tasks.shutdown()
         self.proxy_tasks.shutdown()

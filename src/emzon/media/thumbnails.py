@@ -22,11 +22,11 @@ TIMEOUT = 20
 Key = tuple[Path, float, bool]
 
 
-def grab(path: Path, time: float, accurate: bool) -> QImage:
+def grab(path: Path, time: float, accurate: bool, height: int = HEIGHT) -> QImage:
     args = [find_tool("ffmpeg"), "-v", "error", "-ss", f"{time:.3f}"]
     if not accurate:
         args.append("-noaccurate_seek")
-    args += ["-i", path, "-frames:v", "1", "-vf", f"scale=-2:{HEIGHT}", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "5", "-"]
+    args += ["-i", path, "-frames:v", "1", "-vf", f"scale=-2:{height}", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "5", "-"]
     result = run(args, timeout=TIMEOUT)
     image = QImage.fromData(result.stdout, "JPG")
     if result.returncode != 0 or image.isNull():
@@ -37,8 +37,9 @@ def grab(path: Path, time: float, accurate: bool) -> QImage:
 class Thumbnails(QObject):
     ready = Signal()
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, height: int = HEIGHT) -> None:
         super().__init__(parent)
+        self._height = height
         self._cache: OrderedDict[Key, QImage | None] = OrderedDict()
         self._wanted: list[Key] = []
         self._busy: set[Key] = set()
@@ -86,7 +87,7 @@ class Thumbnails(QObject):
                 key = self._wanted.pop()
                 self._busy.add(key)
             try:
-                image = grab(*key)
+                image = grab(*key, height=self._height)
             except Exception as error:  # noqa: BLE001  one missing frame must not stop the others
                 log.warning("thumbnail at %.2f s of %s: %s", key[1], key[0].name, error)
                 image = None

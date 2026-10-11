@@ -7,6 +7,8 @@ from pathlib import Path
 from emzon.export.jobs import PARTIAL_SUFFIX
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov", ".m4v", ".webm", ".avi"}
+# Smaller than this, a file cannot hold a video: a recording that was never finished.
+MIN_SIZE = 16_000
 
 
 def is_video(path: Path) -> bool:
@@ -15,10 +17,17 @@ def is_video(path: Path) -> bool:
 
 def clips_in(folder: Path) -> list[Path]:
     try:
-        entries = [p for p in folder.iterdir() if p.is_file() and is_video(p)]
+        entries = [p for p in folder.iterdir() if p.is_file() and is_video(p) and _size(p) >= MIN_SIZE]
     except OSError:
         return []
     return sorted(entries, key=lambda p: (-_modified(p), p.name.lower()))
+
+
+def _size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
 
 
 def _modified(path: Path) -> float:
@@ -57,6 +66,20 @@ class Playlist:
         if not 0 <= target < len(self.files):
             return None
         self.index = target
+        return self.current
+
+    def drop(self, path: Path, direction: int = 1) -> Path | None:
+        """Forget an unreadable clip; the one to show instead, keeping the direction of travel."""
+        if path not in self.files or len(self.files) == 1:
+            if path in self.files:
+                self.files.clear()
+            return None
+        removed = self.files.index(path)
+        was_current = removed == self.index
+        self.files.pop(removed)
+        if removed < self.index or (was_current and direction < 0):
+            self.index -= 1
+        self.index = min(max(self.index, 0), len(self.files) - 1)
         return self.current
 
     @property

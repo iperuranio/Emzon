@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -7,7 +8,7 @@ from emzon.media.clips import Playlist, clips_in
 
 def make(folder, name, age):
     path = folder / name
-    path.write_bytes(b"x")
+    path.write_bytes(b"x" * 20_000)
     os.utime(path, (1_700_000_000 - age, 1_700_000_000 - age))
     return path
 
@@ -51,3 +52,30 @@ def test_a_clip_outside_any_listing_still_opens(tmp_path):
 def test_an_empty_playlist_is_an_error():
     with pytest.raises(ValueError):
         Playlist([])
+
+
+def test_files_too_small_for_a_video_are_left_out(tmp_path):
+    good = make(tmp_path, "good.mp4", 10)
+    (tmp_path / "unfinished-altf10.mp4").write_bytes(b"x" * 1_000)
+    assert clips_in(tmp_path) == [good]
+
+
+def test_dropping_the_current_clip_moves_on_in_the_same_direction():
+    files = [Path(n) for n in ("a.mp4", "b.mp4", "c.mp4", "d.mp4")]
+    forward = Playlist(list(files), 1)
+    assert forward.drop(files[1], 1) == files[2] and forward.position == "2/3"
+    backward = Playlist(list(files), 2)
+    assert backward.drop(files[2], -1) == files[1] and backward.position == "2/3"
+    last = Playlist(list(files), 3)
+    assert last.drop(files[3], 1) == files[2]
+
+
+def test_dropping_another_clip_keeps_the_current_one():
+    files = [Path(n) for n in ("a.mp4", "b.mp4", "c.mp4")]
+    playlist = Playlist(list(files), 2)
+    assert playlist.drop(files[0]) == files[2] and playlist.position == "2/2"
+
+
+def test_dropping_the_only_clip_leaves_nothing():
+    playlist = Playlist([Path("a.mp4")])
+    assert playlist.drop(Path("a.mp4")) is None and playlist.files == []
