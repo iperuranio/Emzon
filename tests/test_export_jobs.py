@@ -119,3 +119,12 @@ def test_real_export_is_trimmed_to_the_selection(tmp_path, kind):
     video = [s for s in info["streams"] if s["codec_type"] == "video"]
     assert len(audio) == 1 and audio[0]["channels"] == 2
     assert len(video) == (1 if kind is Kind.VIDEO else 0)
+
+
+def test_gpu_decoding_only_in_the_hardware_attempt(tmp_path):
+    hardware = command("ffmpeg", request(tmp_path), hardware=True)
+    software = command("ffmpeg", request(tmp_path), hardware=False)
+    audio = command("ffmpeg", request(tmp_path, Kind.AUDIO), hardware=True)
+    assert hardware[hardware.index("-hwaccel") + 1] == "auto"
+    assert hardware.index("-hwaccel") < hardware.index("-i")
+    assert "-hwaccel" not in software and "-hwaccel" not in audio

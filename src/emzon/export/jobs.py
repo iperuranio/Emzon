@@ -119,6 +119,10 @@ def command(ffmpeg: Path | str, request: Request, hardware: bool) -> list[str]:
     args = [
         str(ffmpeg), "-hide_banner", "-nostdin", "-y", "-v", "error",
         "-progress", "pipe:1", "-nostats",
+    ]
+    if hardware and request.kind is Kind.VIDEO:
+        args += ["-hwaccel", "auto"]
+    args += [
         "-ss", f"{request.start:.6f}", "-i", str(request.source),
         "-t", f"{request.duration:.6f}",
     ]

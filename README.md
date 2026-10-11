@@ -6,42 +6,69 @@
 
 Emzon serve a una cosa sola: aprire una clip di gioco, togliere quello che non serve e salvarla, in pochi secondi.
 
-Le registrazioni di NVIDIA ShadowPlay durano spesso minuti, ma quello che interessa sono gli ultimi secondi. Emzon apre il file, ti fa zoomare sul punto giusto, taglia testa e coda con un tasto e mette l'export in coda, così passi subito alla clip successiva.
-
-**Stato:** in sviluppo, non ancora utilizzabile.
+Le registrazioni di NVIDIA ShadowPlay durano spesso minuti, ma quello che interessa sono gli ultimi secondi. Emzon apre il file con la testina già vicino alla fine, ti fa zoomare sul punto giusto, taglia testa e coda con un tasto e mette l'export in coda, così passi subito alla clip successiva.
 
 ### Cosa fa
 
-- Apre un video o una cartella, anche trascinandoli nella finestra. Si lavora su una clip alla volta.
-- Taglio preciso al frame: `Q` taglia la testa, `W` la coda, alla posizione della testina.
-- Gestisce più tracce audio, come quelle di ShadowPlay con gioco e microfono separati, con un volume per traccia.
-- `Invio` salva il video accanto all'originale con `_edited` nel nome. `A` salva solo l'audio, per esempio per una soundboard.
-- Gli export finiscono in una coda di rendering accelerata dalla GPU (NVENC), e intanto si continua a lavorare.
+- Apre un video o una cartella, anche trascinandoli nella finestra. Si lavora su una clip alla volta e si passa alle altre della stessa cartella con `PagSu` e `PagGiù`, dalla più recente.
+- Taglio preciso al fotogramma alla posizione della testina.
+- Riproduce insieme tutte le tracce audio, come quelle di ShadowPlay con gioco e microfono separati, ognuna con il suo volume.
+- Salva il video accanto all'originale con `_edited` nel nome, oppure solo l'audio (MP3, WAV o OGG), per esempio per una soundboard.
+- Gli export finiscono in una coda: l'encoding usa NVENC della scheda NVIDIA, con l'encoding sulla CPU se NVENC non c'è, e intanto si continua a lavorare.
 - Nelle impostazioni si sceglie una cartella fissa per gli export, oppure di sostituire l'originale mandandolo nel Cestino.
 
-### Requisiti
+### Tasti
 
-- Windows 10 o 11, 64 bit
-- Scheda video NVIDIA per l'encoding hardware
+| Tasto | Azione |
+| --- | --- |
+| `Spazio` | Riproduci o ferma |
+| `Q` | Taglia la testa alla testina |
+| `W` | Taglia la coda alla testina |
+| `Invio` | Salva il video |
+| `A` | Salva solo l'audio |
+| `←` `→` | Testina indietro o avanti di 1 secondo |
+| `Maiusc` + `←` `→` | Un fotogramma indietro o avanti |
+| `F` | Inquadra la selezione, di nuovo per tutto il file |
+| `PagSu` `PagGiù` | Clip precedente o successiva |
+| `1` … `9` | Silenzia o riattiva una traccia |
+| `Ctrl` + `O` | Apri un file |
+
+Sulla timeline la rotellina zooma attorno al cursore, `Maiusc` + rotellina scorre, un clic sposta la testina senza avviare la riproduzione.
+
+### Installazione
+
+Scarica `Emzon-win-x64.zip` dall'ultima release, estrailo in una cartella e avvia `Emzon.exe`. Serve Windows 10 o 11 a 64 bit; per l'encoding hardware, una scheda NVIDIA.
 
 ## English
 
 Emzon does one thing: open a game clip, cut what you don't need, save it, in a few seconds.
 
-NVIDIA ShadowPlay recordings often run for minutes while the part worth keeping is the last few seconds. Emzon opens the file, lets you zoom to the right spot, trims head and tail with a single key and queues the export, so you can move straight to the next clip.
-
-**Status:** in development, not usable yet.
+NVIDIA ShadowPlay recordings often run for minutes while the part worth keeping is the last few seconds. Emzon opens the file with the playhead already near the end, lets you zoom to the right spot, trims head and tail with a single key and queues the export, so you can move straight to the next clip.
 
 ### Features
 
-- Open a video or a whole folder, drag and drop included. One clip at a time.
-- Frame-accurate trimming: `Q` cuts the head, `W` the tail, at the playhead.
-- Multiple audio tracks, such as ShadowPlay's separate game and microphone tracks, each with its own volume.
-- `Enter` saves the video next to the original with `_edited` in the name. `A` saves the audio only, for a soundboard for instance.
-- Exports run in a GPU-accelerated render queue (NVENC) while you keep working.
+- Open a video or a whole folder, drag and drop included. One clip at a time; `PgUp` and `PgDn` move through the rest of the folder, newest first.
+- Frame-accurate trimming at the playhead.
+- Every audio track plays at once, such as ShadowPlay's separate game and microphone tracks, each with its own volume.
+- Save the video next to the original with `_edited` in the name, or the audio only (MP3, WAV or OGG), for a soundboard for instance.
+- Exports run in a queue while you keep working, encoded with NVENC on NVIDIA cards and on the CPU otherwise.
 - Settings let you pick a fixed export folder, or replace the original and move it to the Recycle Bin.
 
-### Requirements
+### Installation
 
-- Windows 10 or 11, 64-bit
-- An NVIDIA graphics card for hardware encoding
+Download `Emzon-win-x64.zip` from the latest release, unzip it into a folder and run `Emzon.exe`. Requires 64-bit Windows 10 or 11; hardware encoding needs an NVIDIA graphics card.
+
+### Development
+
+```
+python -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m emzon
+.venv/bin/python -m pytest
+```
+
+During development FFmpeg, FFprobe and libmpv come from the system (on macOS: `brew install ffmpeg mpv`). The Windows build bundles pinned copies; see `docs/architecture.md` and `THIRD_PARTY.md`.
+
+## License
+
+GPL-3.0. See `LICENSE` and `THIRD_PARTY.md`.

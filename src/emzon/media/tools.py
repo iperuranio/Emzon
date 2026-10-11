@@ -8,7 +8,8 @@ import sys
 import threading
 from pathlib import Path
 
-NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+# Background tools never show a console and yield to whatever else runs, games first.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
 
 _running: dict[subprocess.Popen, str] = {}
 _lock = threading.Lock()

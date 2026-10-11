@@ -66,10 +66,12 @@ The two cut actions also have buttons on either side of the play button: `Taglia
 
 ## Saving
 
-- **Video** (`Enter`): a copy next to the original named `<name>_edited.<ext>`. If that name exists, `<name>_edited (2).<ext>` and so on.
+- **Video** (`Enter`): a copy next to the original named `<name>_edited.<ext>`. If that name exists, `<name>_edited (2).<ext>` and so on. The frame under the playhead when the tail was cut is the last frame of the export.
 - **Audio** (`A`): the mix of all tracks with their current volumes. MP3 by default; the format is a setting.
 - Settings can send every export to one fixed folder, or replace the original and move the original to the Recycle Bin.
-- Every export goes to the render queue and editing continues immediately. A finished job shows a check and a button to reveal the file in Explorer.
+- Every export goes to the render queue and editing continues immediately. A finished job shows a check and a button to reveal the file in Explorer; a failed one turns red with the reason in its tooltip.
+- The queue's ring sits in the header only while the queue holds jobs. `Rimuovi completati` clears what has finished.
+- Closing the window while exports are running asks first; the safe choice, staying open, is the default.
 
 ## Tokens
 
@@ -88,9 +90,11 @@ The two cut actions also have buttons on either side of the play button: `Taglia
 | `faint` | `#7E7791` | Ruler labels |
 | `accent` | `#9B7BFF` | Primary action, cut handles, progress |
 | `accent-soft` | `#B9A4FF` | Accent text on dark |
+| `on-accent` | `#120E1A` | Text on accent |
 | `track-1` | `#A88BFF` | First audio track |
 | `track-2` | `#D9CCFF` | Second audio track |
 | `ok` | `#8FE3B0` | Finished job |
+| `error` | `#FF8A9A` | Failures |
 
 Further tracks continue the violet scale, alternating lightness so neighbours stay distinguishable.
 
@@ -112,10 +116,12 @@ Further tracks continue the violet scale, alternating lightness so neighbours st
 - Every visible string is a label, a value, a state or an action. Explanations go in tooltips.
 - Controls read verb plus object (`Taglia testa`, `Salva video`). Errors say what happened, why, and what to do.
 
-## States still to design
+## States
 
-- Empty window, ready for a drop
-- Loading a clip
-- A file that cannot be read
-- NVENC not available
-- Settings
+- **Empty:** `Trascina qui una clip` and an `Apri file` button, nothing else.
+- **Dragging a file over the window:** a violet frame over the whole window.
+- **Loading:** the previous view stays until the clip is ready; `Apertura…` appears only if opening takes longer than 300 ms.
+- **Error:** the file name in red, then what went wrong and what to do, in one sentence.
+- **No audio:** only the video lane; `Salva audio` is disabled.
+- **Waveform not readable:** the lane says `Onda non disponibile`.
+- **Settings:** three choices (destination, what saving a video does, audio format), each a segmented control, applied at once.
