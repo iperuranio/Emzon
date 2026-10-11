@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emzon"
+dynamic = ["version"]
+description = "Fast trimming for game clips"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6==6.12.0",
+    "mpv==1.0.8",
+    "numpy==2.5.4",
+    "Send2Trash==2.1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[tool.setuptools.dynamic]
+version = { attr = "emzon.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

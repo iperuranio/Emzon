@@ -1,0 +1,121 @@
+# Design
+
+The reference for how Emzon looks and behaves. When the code and this file disagree, one of them is wrong: fix it in the same change.
+
+## Principles
+
+- One clip at a time. The window always shows exactly one file.
+- Every frequent action has one key and one visible control. Nothing asks for confirmation unless it destroys data.
+- The timeline never misleads: how much of the file is visible, where the file really starts and ends, and what has been cut are always readable at a glance.
+- Nothing runs while nobody is looking. A hidden or unfocused window that is not playing does no work.
+
+## Layout
+
+From top to bottom:
+
+1. **Header** (56 px). Left: open, previous clip, position in the folder (`3/14`), next clip, file name. Right: render queue (present only while it holds jobs), settings.
+2. **Stage.** The video, 16:9, centred, rounded 12 px.
+3. **Timeline panel.** Overview, zoom funnel, ruler, video lane, one lane per audio track, transport bar.
+
+The track gutter on the left of the timeline is 150 px wide and holds each track's name, volume and mute control.
+
+## Timeline
+
+### Zoom and orientation
+
+- **Overview.** The whole file, always. It is exactly as wide as the file appears in the fully zoomed out timeline below it. It shows cut parts hatched, the kept part tinted, the visible window as a white frame and the playhead as a violet line.
+- **Funnel.** Two lines join the edges of the visible window in the overview to the edges of the file in the detail view. Fully zoomed out they are vertical; zooming in makes them converge on the magnified part.
+- **Readout.** Left of the overview: the length of the file currently visible, then the total (`12,0 s di 5:00`).
+- **File ends.** The detail view may run up to 2% past either end of the file. A real start or end is drawn as a rounded cap with a brighter edge and labelled `Inizio` or `Fine` on the ruler. Where the clip continues beyond the view, the lanes fade out at the edge instead.
+- **Cut parts** stay where they are, hatched. The timeline is never folded or rescaled around the selection, so its scale always matches the file.
+
+### Mouse
+
+- **Wheel** zooms around the mouse cursor, not around the playhead. Minimum visible span: 0.5 s.
+- **Shift + wheel** and horizontal scrolling pan the view.
+- **Click** moves the playhead. It never starts or stops playback: paused stays paused, playing continues from the new point.
+- **Drag** scrubs. Playback, if it was running, pauses during the drag and resumes on release.
+- **Overview:** click or drag centres the view on that point; double click shows the whole file.
+
+### Keyboard
+
+| Key | Action |
+| --- | --- |
+| `Space` | Play or pause |
+| `Q` | Cut the head at the playhead |
+| `W` | Cut the tail at the playhead |
+| `Enter` | Save the video |
+| `A` | Save the audio only |
+| `←` `→` | Move the playhead by 1 s |
+| `Shift` + `←` `→` | Move the playhead by one frame |
+| `F` | Fit the selection; press again for the whole file |
+| `PgUp` `PgDn` | Previous or next clip in the folder |
+| `Ctrl` + `O` | Open a file or folder |
+| `1` to `9` | Mute or unmute track n |
+
+`Q` and `W` also work during playback, cutting where the playhead is at that instant. Cutting the head past the current tail resets the tail to the end of the file, and the reverse.
+
+The two cut actions also have buttons on either side of the play button: `Taglia testa` on the left, `Taglia coda` on the right, each showing its key.
+
+## Opening files
+
+- A file or folder can be opened from the header or dropped anywhere on the window. Dropping replaces the clip being edited, without asking.
+- A folder opens its most recent clip first. `PgUp` and `PgDn` move through the others.
+- A clip remembers its cut points for the session, so coming back to it restores them.
+- A new clip opens with the playhead near the end, where the interesting part usually is.
+
+## Saving
+
+- **Video** (`Enter`): a copy next to the original named `<name>_edited.<ext>`. If that name exists, `<name>_edited (2).<ext>` and so on.
+- **Audio** (`A`): the mix of all tracks with their current volumes. MP3 by default; the format is a setting.
+- Settings can send every export to one fixed folder, or replace the original and move the original to the Recycle Bin.
+- Every export goes to the render queue and editing continues immediately. A finished job shows a check and a button to reveal the file in Explorer.
+
+## Tokens
+
+### Colour
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `bg` | `#0E0C13` | Window |
+| `panel` | `#14111B` | Timeline panel |
+| `lane` | `#1A1622` | Lanes, popovers |
+| `raised` | `#1E1A28` | Hover, chips |
+| `line` | `#2A2535` | Separators, slider tracks |
+| `line-strong` | `#6B5F8A` | File start and end |
+| `text` | `#ECE8F4` | Primary text, playhead |
+| `muted` | `#9A93AB` | Secondary text, icons |
+| `faint` | `#7E7791` | Ruler labels |
+| `accent` | `#9B7BFF` | Primary action, cut handles, progress |
+| `accent-soft` | `#B9A4FF` | Accent text on dark |
+| `track-1` | `#A88BFF` | First audio track |
+| `track-2` | `#D9CCFF` | Second audio track |
+| `ok` | `#8FE3B0` | Finished job |
+
+Further tracks continue the violet scale, alternating lightness so neighbours stay distinguishable.
+
+### Type
+
+- **Geist** for the interface, **Geist Mono** for every time value, so digits never shift width.
+- Sizes: 20 px playhead time, 14 px file name and buttons, 13 px labels, 12 px values, 11 px ruler and key caps.
+
+### Shape
+
+- Radii: lanes 6 px, buttons 10 px, popovers 14 px, the video 12 px.
+- Icons: 1.75 px stroke, round caps and joins.
+
+## Copy
+
+- The interface is in Italian. All strings live in one module so other languages can be added.
+- Sentence case, real accents, «caporali», the `…` character.
+- Times as `m:ss,cc` (`4:16,40`), durations under a minute as seconds (`10,00 s`). Decimal comma.
+- Every visible string is a label, a value, a state or an action. Explanations go in tooltips.
+- Controls read verb plus object (`Taglia testa`, `Salva video`). Errors say what happened, why, and what to do.
+
+## States still to design
+
+- Empty window, ready for a drop
+- Loading a clip
+- A file that cannot be read
+- NVENC not available
+- Settings
