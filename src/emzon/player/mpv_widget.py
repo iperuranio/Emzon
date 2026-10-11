@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import locale
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 import mpv
 from emzon.player.audio_graph import MIX_LABEL, complex_graph, mix_filter, volume_filter
 from emzon.ui import theme
+
+log = logging.getLogger(__name__)
 
 
 class MpvWidget(QOpenGLWidget):
@@ -72,6 +75,14 @@ class MpvWidget(QOpenGLWidget):
             # The filter chain is only built once audio flows; until then the
             # gains travel with the chain's definition.
             self.player.af = mix_filter(self._gains)
+
+    def unload(self) -> None:
+        """Close the current file so other programs may move or delete it."""
+        self.player.command("stop")
+        try:
+            self.player.wait_for_property("idle-active", lambda idle: idle, timeout=2)
+        except TimeoutError:
+            log.warning("the player did not release the file within 2 s")
 
     def seek(self, time: float) -> None:
         self.player.command("seek", f"{time:.6f}", "absolute+exact")

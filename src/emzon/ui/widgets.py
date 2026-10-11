@@ -14,10 +14,15 @@ KEYCAP_GAP = 10
 class ActionButton(QPushButton):
     """A button that shows its keyboard shortcut as a key cap."""
 
-    def __init__(self, text: str, icon_name: str, key: str, tooltip: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, text: str, icon_name: str, key: str, tooltip: str, primary: bool = False, parent: QWidget | None = None
+    ) -> None:
         super().__init__(text, parent)
         self.key = key
-        self.setIcon(icons.icon(icon_name, theme.TEXT, 18))
+        self.primary = primary
+        if primary:
+            self.setProperty("role", "primary")
+        self.setIcon(icons.icon(icon_name, theme.ON_ACCENT if primary else theme.TEXT, 18))
         self.setIconSize(QSize(18, 18))
         self.setToolTip(tooltip)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -32,7 +37,10 @@ class ActionButton(QPushButton):
         painter.setFont(theme.mono_font(11))
         width = painter.fontMetrics().horizontalAdvance(self.key) + 12
         rect = QRectF(self.width() - KEYCAP_GAP - width, (self.height() - 20) / 2, width, 20)
-        color = theme.MUTED if self.isEnabled() else theme.LINE
+        if not self.isEnabled():
+            color = theme.LINE
+        else:
+            color = theme.ON_ACCENT if self.primary else theme.MUTED
         painter.setPen(QPen(color, 1))
         painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 5, 5)
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.key)

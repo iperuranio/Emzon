@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QLineF, QPointF, QRectF, QSize, Qt, Signal
@@ -23,6 +24,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
+from emzon.media.thumbnails import Thumbnails
 from emzon.media.waveform import Waveform
 from emzon.timefmt import format_span, format_time
 from emzon.timeline.model import END_MARGIN, Timeline
@@ -36,8 +38,11 @@ GUTTER_GAP = 12
 OVERVIEW_H = 28
 FUNNEL_H = 18
 RULER_H = 24
+VIDEO_H = 48
 LANE_H = 64
 LANE_GAP = 6
+TILE_STEPS = (0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300)
+ACCURATE_TILES_BELOW = 4.0
 BAR_STEP = 3
 MAX_GAIN = 1.5
 WHEEL_ZOOM = 0.25
@@ -66,15 +71,19 @@ class TimelineView(QWidget):
         super().__init__(parent)
         self.model: Timeline | None = None
         self.tracks: list[Track] = []
+        self.path: Path | None = None
+        self.thumbnails: Thumbnails | None = None
         self._cache: QPixmap | None = None
         self._drag: str | None = None
         self._drag_track = -1
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
-    def set_content(self, model: Timeline, tracks: list[Track]) -> None:
+    def set_content(self, model: Timeline, tracks: list[Track], path: Path, thumbnails: Thumbnails | None) -> None:
         self.model = model
         self.tracks = tracks
+        self.path = path
+        self.thumbnails = thumbnails
         self.updateGeometry()
         self.refresh()
 
@@ -94,8 +103,7 @@ class TimelineView(QWidget):
         return QSize(640, self._height())
 
     def _height(self) -> int:
-        lanes = len(self.tracks) * (LANE_H + LANE_GAP) - (LANE_GAP if self.tracks else 0)
-        return PAD_TOP + OVERVIEW_H + FUNNEL_H + RULER_H + lanes + PAD_BOTTOM
+        return round(self._lanes_bottom()) + PAD_BOTTOM
 
     # Geometry
 
@@ -119,11 +127,14 @@ class TimelineView(QWidget):
     def _ruler_top(self) -> float:
         return PAD_TOP + OVERVIEW_H + FUNNEL_H
 
+    def _video_top(self) -> float:
+        return self._ruler_top() + RULER_H
+
     def _lane_top(self, position: int) -> float:
-        return self._ruler_top() + RULER_H + position * (LANE_H + LANE_GAP)
+        return self._video_top() + VIDEO_H + LANE_GAP + position * (LANE_H + LANE_GAP)
 
     def _lanes_bottom(self) -> float:
-        return self._lane_top(len(self.tracks)) - LANE_GAP if self.tracks else self._ruler_top() + RULER_H
+        return self._lane_top(len(self.tracks)) - LANE_GAP
 
     def _slider(self, position: int) -> QRectF:
         top = self._lane_top(position) + LANE_H / 2 + 6
@@ -164,6 +175,7 @@ class TimelineView(QWidget):
         self._paint_overview(p)
         self._paint_funnel(p)
         self._paint_ruler(p)
+        self._paint_video(p)
         for position, track in enumerate(self.tracks):
             self._paint_lane(p, position, track)
             self._paint_gutter(p, position, track)
@@ -285,6 +297,50 @@ class TimelineView(QWidget):
         path.arcTo(rect.left(), rect.top(), 2 * left_round, 2 * left_round, 180, -90)
         path.closeSubpath()
         return path
+
+    def _paint_video(self, p: QPainter) -> None:
+        m = self.model
+        top = self._video_top()
+        icons.paint(p, "film", QRectF(PAD_X, top + VIDEO_H / 2 - 8, 16, 16), theme.MUTED)
+        p.setFont(theme.ui_font(13))
+        p.setPen(theme.MUTED)
+        p.drawText(QPointF(PAD_X + 24, top + VIDEO_H / 2 + 5), strings.VIDEO_LANE)
+
+        start, end = self._file_span()
+        if end <= start:
+            return
+        rect = QRectF(start, top, end - start, VIDEO_H)
+        path = self._lane_path(rect)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(theme.LANE)
+        p.drawPath(path)
+        if self.thumbnails is None or self.path is None:
+            return
+
+        left, width = self._content()
+        tile_width = VIDEO_H * 16 / 9
+        seconds_per_pixel = m.span / width
+        step = next((s for s in TILE_STEPS if s / seconds_per_pixel >= tile_width), TILE_STEPS[-1])
+        accurate = step < ACCURATE_TILES_BELOW
+        first = math.floor(max(m.view_start, 0.0) / step)
+        last = math.ceil(min(m.view_end, m.duration) / step)
+        shown: set[tuple[float, bool]] = set()
+        p.save()
+        p.setClipPath(path)
+        for k in range(first, last):
+            t0, t1 = k * step, min((k + 1) * step, m.duration)
+            time = round(max(0.0, min(t0 + step / 2, m.duration - 0.05)), 2)
+            shown.add((time, accurate))
+            image = self.thumbnails.get(self.path, time, accurate)
+            if image is None:
+                continue
+            target = QRectF(self._x(t0) + 1, top, self._x(t1) - self._x(t0) - 2, VIDEO_H)
+            source_width = min(image.width(), image.height() * target.width() / target.height())
+            source_height = min(image.height(), image.width() * target.height() / target.width())
+            source = QRectF((image.width() - source_width) / 2, (image.height() - source_height) / 2, source_width, source_height)
+            p.drawImage(target, image, source)
+        p.restore()
+        self.thumbnails.keep_only(self.path, shown)
 
     def _paint_lane(self, p: QPainter, position: int, track: Track) -> None:
         m = self.model

@@ -2,22 +2,30 @@
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QFont, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from emzon import settings
+from emzon.export.jobs import Kind, Request, destination, video_extension
+from emzon.export.queue import ExportQueue, Job
+from emzon.media.clips import Playlist
 from emzon.media.probe import Clip, ProbeError, probe
+from emzon.media.thumbnails import Thumbnails
 from emzon.media.tools import ToolMissing
 from emzon.media.waveform import load_waveform
 from emzon.player.mpv_widget import MpvWidget
@@ -26,10 +34,30 @@ from emzon.timefmt import format_duration, format_time
 from emzon.timeline.model import Timeline
 from emzon.timeline.view import TimelineView, Track
 from emzon.ui import strings, theme
+from emzon.ui.queue_view import QueueButton, QueuePopover
+from emzon.ui.settings_view import SettingsDialog
 from emzon.ui.widgets import ActionButton, IconButton, PlayButton
+
+log = logging.getLogger(__name__)
 
 START_BEFORE_END = 30.0
 END_TOLERANCE = 0.05
+LOADING_DELAY_MS = 300
+THUMBNAIL_REFRESH_MS = 80
+
+
+@dataclass
+class Snapshot:
+    """What the user did to a clip, kept for the session."""
+
+    duration: float
+    playhead: float
+    cut_in: float
+    cut_out: float
+    view_start: float
+    view_end: float
+    gains: list[float]
+    muted: list[bool]
 
 
 class MainWindow(QMainWindow):
@@ -38,20 +66,35 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(strings.APP_NAME)
         self.setAcceptDrops(True)
         self.resize(1440, 900)
-        self.setMinimumSize(960, 640)
+        self.setMinimumSize(1024, 700)
 
+        self.preferences = settings.load()
         self.clip: Clip | None = None
         self.model: Timeline | None = None
         self.tracks: list[Track] = []
+        self.playlist: Playlist | None = None
+        self.memory: dict[Path, Snapshot] = {}
         self._generation = 0
+        self._loading_path: Path | None = None
+        self._player_ready = False
         self._resume_after_scrub = False
+
         self.tasks = Tasks(self)
         self.tasks.finished.connect(self._on_task)
+        self.queue = ExportQueue(self)
+        self.queue.replace_ready.connect(self._finish_replace)
+        self.thumbnails = Thumbnails(self)
+        self._thumbnail_timer = QTimer(self, singleShot=True, interval=THUMBNAIL_REFRESH_MS)
+        self._thumbnail_timer.timeout.connect(lambda: self.timeline.refresh())
+        self.thumbnails.ready.connect(self._thumbnail_timer.start)
+        self._loading_timer = QTimer(self, singleShot=True, interval=LOADING_DELAY_MS)
+        self._loading_timer.timeout.connect(self._show_loading)
 
         self.player = MpvWidget()
         self.player.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.player.time_changed.connect(self._on_time)
         self.player.pause_changed.connect(self._on_pause)
+        self.player.loaded.connect(self._on_player_loaded)
 
         self.timeline = TimelineView()
         self.timeline.playhead_requested.connect(self._seek)
@@ -79,14 +122,46 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout(header)
         row.setContentsMargins(20, 0, 16, 0)
         row.setSpacing(6)
+
         open_button = IconButton("folder", strings.OPEN_TIP)
         open_button.clicked.connect(self.choose_file)
         row.addWidget(open_button)
+
+        self.navigation = QWidget()
+        nav = QHBoxLayout(self.navigation)
+        nav.setContentsMargins(6, 0, 0, 0)
+        nav.setSpacing(2)
+        divider = QWidget()
+        divider.setFixedSize(1, 20)
+        divider.setStyleSheet(f"background: {theme.LINE.name()};")
+        self.previous_button = IconButton("chevron-left", strings.PREVIOUS_TIP, size=18)
+        self.previous_button.clicked.connect(lambda: self.step_clip(-1))
+        self.position_label = QLabel()
+        self.position_label.setFont(theme.mono_font(13))
+        self.position_label.setStyleSheet(f"color: {theme.MUTED.name()};")
+        self.position_label.setMinimumWidth(44)
+        self.position_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.next_button = IconButton("chevron-right", strings.NEXT_TIP, size=18)
+        self.next_button.clicked.connect(lambda: self.step_clip(1))
+        nav.addWidget(divider)
+        nav.addSpacing(6)
+        nav.addWidget(self.previous_button)
+        nav.addWidget(self.position_label)
+        nav.addWidget(self.next_button)
+        row.addWidget(self.navigation)
+
         self.file_label = QLabel()
         self.file_label.setFont(theme.ui_font(14, QFont.Weight.Medium))
-        self.file_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
-        row.addSpacing(6)
+        row.addSpacing(10)
         row.addWidget(self.file_label, 1)
+
+        self.queue_button = QueueButton(self.queue)
+        self.queue_popover = QueuePopover(self.queue, self)
+        self.queue_button.clicked.connect(lambda: self.queue_popover.open_below(self.queue_button))
+        row.addWidget(self.queue_button)
+        settings_button = IconButton("sliders", strings.SETTINGS)
+        settings_button.clicked.connect(self.open_settings)
+        row.addWidget(settings_button)
         return header
 
     def _build_stage(self) -> QWidget:
@@ -122,10 +197,11 @@ class MainWindow(QMainWindow):
         self.message_detail = QLabel()
         self.message_detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.message_detail.setWordWrap(True)
+        self.message_detail.setMaximumWidth(560)
         self.message_detail.setStyleSheet(f"color: {theme.MUTED.name()};")
         column.addWidget(self.message_title)
         column.addSpacing(8)
-        column.addWidget(self.message_detail)
+        column.addWidget(self.message_detail, 0, Qt.AlignmentFlag.AlignCenter)
         self.message_page = message
 
         for page in (self.empty_page, self.video_page, self.message_page):
@@ -163,6 +239,11 @@ class MainWindow(QMainWindow):
         self.selection_label.setFont(theme.mono_font(13))
         self.selection_label.setStyleSheet(f"color: {theme.ACCENT_SOFT.name()};")
 
+        self.save_audio_button = ActionButton(strings.SAVE_AUDIO, "wave", "A", strings.SAVE_AUDIO_TIP)
+        self.save_audio_button.clicked.connect(lambda: self.save(Kind.AUDIO))
+        self.save_video_button = ActionButton(strings.SAVE_VIDEO, "film", "Invio", strings.SAVE_VIDEO_TIP, primary=True)
+        self.save_video_button.clicked.connect(lambda: self.save(Kind.VIDEO))
+
         row.addWidget(self.cut_head_button)
         row.addWidget(self.play_button)
         row.addWidget(self.cut_tail_button)
@@ -172,6 +253,8 @@ class MainWindow(QMainWindow):
         row.addWidget(selection_name)
         row.addWidget(self.selection_label)
         row.addStretch(1)
+        row.addWidget(self.save_audio_button)
+        row.addWidget(self.save_video_button)
         column.addWidget(bar)
         return self.panel
 
@@ -181,10 +264,15 @@ class MainWindow(QMainWindow):
             "Q": self.cut_head,
             "W": self.cut_tail,
             "F": self.fit_selection,
+            "A": lambda: self.save(Kind.AUDIO),
+            "Return": lambda: self.save(Kind.VIDEO),
+            "Enter": lambda: self.save(Kind.VIDEO),
             "Left": lambda: self.step(-1.0),
             "Right": lambda: self.step(1.0),
             "Shift+Left": lambda: self.step_frames(-1),
             "Shift+Right": lambda: self.step_frames(1),
+            "PgUp": lambda: self.step_clip(-1),
+            "PgDown": lambda: self.step_clip(1),
             "Ctrl+O": self.choose_file,
         }
         for number in range(1, 10):
@@ -197,23 +285,53 @@ class MainWindow(QMainWindow):
     # Opening
 
     def choose_file(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, strings.OPEN_DIALOG, "", strings.VIDEO_FILTER)
+        start = str(self.clip.path.parent) if self.clip else ""
+        path, _ = QFileDialog.getOpenFileName(self, strings.OPEN_DIALOG, start, strings.VIDEO_FILTER)
         if path:
             self.open_path(Path(path))
 
     def open_path(self, path: Path) -> None:
+        if path.is_dir():
+            playlist = Playlist.of_folder(path)
+            if playlist is None:
+                self._show_message(strings.NO_CLIPS.format(name=path.name), strings.NO_CLIPS_DETAIL, error=True)
+                return
+        else:
+            playlist = Playlist.around(path)
+        self.playlist = playlist
+        self._open_clip(playlist.current)
+
+    def step_clip(self, delta: int) -> None:
+        if self.playlist is None:
+            return
+        target = self.playlist.step(delta)
+        if target is not None:
+            self._open_clip(target)
+
+    def _open_clip(self, path: Path) -> None:
+        self._remember()
         self._generation += 1
+        self._player_ready = False
+        self._loading_path = path
         self.player.set_paused(True)
         self.file_label.setText(path.name)
-        self._show_message(strings.LOADING, "")
+        self._update_navigation()
+        self._loading_timer.start()
         self.tasks.submit(("probe", self._generation), probe, path)
+
+    def _show_loading(self) -> None:
+        if self._loading_path is not None:
+            self._show_message(strings.LOADING, "")
 
     def _on_task(self, key, result, error) -> None:
         kind, generation, *rest = key
         if generation != self._generation:
             return
         if kind == "probe":
+            self._loading_timer.stop()
+            self._loading_path = None
             if error:
+                log.warning("cannot open %s: %s", self.file_label.text(), error)
                 self._show_open_error(error)
             else:
                 self._load(result)
@@ -221,6 +339,8 @@ class MainWindow(QMainWindow):
             track = self.tracks[rest[0]]
             track.waveform = result
             track.failed = error is not None
+            if error:
+                log.warning("waveform of track %d: %s", rest[0] + 1, error)
             self.timeline.refresh()
 
     def _load(self, clip: Clip) -> None:
@@ -228,63 +348,98 @@ class MainWindow(QMainWindow):
         self.model = Timeline(clip.duration, clip.fps)
         self.model.move_playhead(max(0.0, clip.duration - START_BEFORE_END))
         self.tracks = [Track(strings.track_name(t.position, t.title)) for t in clip.audio]
-        self.timeline.set_content(self.model, self.tracks)
-        self.player.open(clip.path, len(self.tracks), [t.gain for t in self.tracks], self.model.playhead)
+        self._restore(clip)
+        self.timeline.set_content(self.model, self.tracks, clip.path, self.thumbnails)
+        gains = [0.0 if t.muted else t.gain for t in self.tracks]
+        self.player.open(clip.path, len(self.tracks), gains, self.model.playhead)
         for track in clip.audio:
             self.tasks.submit(("waveform", self._generation, track.position), load_waveform, clip.path, track.position)
         self.stage.setCurrentWidget(self.video_page)
         self.panel.show()
         self._update_labels()
 
+    def _remember(self) -> None:
+        if self.clip is None or self.model is None:
+            return
+        m = self.model
+        self.memory[self.clip.path] = Snapshot(
+            m.duration, m.playhead, m.cut_in, m.cut_out, m.view_start, m.view_end,
+            [t.gain for t in self.tracks], [t.muted for t in self.tracks],
+        )
+
+    def _restore(self, clip: Clip) -> None:
+        snapshot = self.memory.get(clip.path)
+        if snapshot is None or abs(snapshot.duration - clip.duration) > 0.01 or len(snapshot.gains) != len(self.tracks):
+            return
+        m = self.model
+        m.move_playhead(snapshot.playhead)
+        m.cut_in, m.cut_out = snapshot.cut_in, snapshot.cut_out
+        m.set_view(snapshot.view_start, snapshot.view_end - snapshot.view_start)
+        for track, gain, muted in zip(self.tracks, snapshot.gains, snapshot.muted):
+            track.gain, track.muted = gain, muted
+
+    def _update_navigation(self) -> None:
+        playlist = self.playlist
+        show = playlist is not None and len(playlist.files) > 1
+        self.navigation.setVisible(show)
+        if show:
+            self.position_label.setText(playlist.position)
+            self.previous_button.setEnabled(playlist.index > 0)
+            self.next_button.setEnabled(playlist.index < len(playlist.files) - 1)
+
     def _show_empty(self) -> None:
         self.stage.setCurrentWidget(self.empty_page)
         self.panel.hide()
+        self._update_navigation()
 
     def _show_message(self, title: str, detail: str, error: bool = False) -> None:
         color = theme.ERROR if error else theme.TEXT
         self.message_title.setStyleSheet(f"color: {color.name()};")
         self.message_title.setText(title)
         self.message_detail.setText(detail)
+        self.message_detail.setVisible(bool(detail))
         self.stage.setCurrentWidget(self.message_page)
         self.panel.hide()
 
     def _show_open_error(self, error: BaseException) -> None:
+        self.clip = None
+        self.model = None
+        self.player.unload()
         if isinstance(error, ToolMissing):
-            reason = strings.TOOL_MISSING.format(tool=error.args[0])
+            detail = strings.TOOL_MISSING.format(tool=error.args[0])
         elif isinstance(error, ProbeError) and str(error) == "no video stream":
-            reason = strings.NO_VIDEO
+            detail = strings.NO_VIDEO
         elif isinstance(error, ProbeError) and str(error) == "unknown duration":
-            reason = strings.UNKNOWN_DURATION
+            detail = strings.UNKNOWN_DURATION
         else:
-            reason = strings.UNREADABLE
-        self._show_message(
-            strings.OPEN_FAILED.format(name=self.file_label.text()),
-            strings.OPEN_FAILED_DETAIL.format(reason=reason),
-            error=True,
-        )
+            detail = strings.UNREADABLE
+        self._show_message(strings.OPEN_FAILED.format(name=self.file_label.text()), detail, error=True)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if any(url.isLocalFile() for url in event.mimeData().urls()):
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent) -> None:
-        files = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
-        files = [f for f in files if f.is_file()]
-        if files:
-            self.open_path(files[0])
+        paths = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
+        paths = [p for p in paths if p.exists()]
+        if paths:
             event.acceptProposedAction()
+            self.open_path(paths[0])
 
     # Playback
 
     def toggle_play(self) -> None:
-        if self.model is None:
+        if self.model is None or not self._player_ready:
             return
         if self.player.paused and self.model.playhead >= self.model.duration - END_TOLERANCE:
             self._seek(self.model.cut_in)
         self.player.set_paused(not self.player.paused)
 
+    def _on_player_loaded(self) -> None:
+        self._player_ready = True
+
     def _on_time(self, time: float) -> None:
-        if self.model is None or self.timeline.scrubbing:
+        if self.model is None or not self._player_ready or self.timeline.scrubbing:
             return
         self.model.move_playhead(time)
         if not self.player.paused:
@@ -302,7 +457,8 @@ class MainWindow(QMainWindow):
         if self.model is None:
             return
         self.model.move_playhead(time)
-        self.player.seek(self.model.playhead)
+        if self._player_ready:
+            self.player.seek(self.model.playhead)
         self.timeline.update()
         self._update_labels()
 
@@ -320,14 +476,14 @@ class MainWindow(QMainWindow):
         if self.model is None:
             return
         self.model.step(seconds)
-        self.player.seek(self.model.playhead)
+        if self._player_ready:
+            self.player.seek(self.model.playhead)
         self.timeline.refresh()
         self._update_labels()
 
     def step_frames(self, frames: int) -> None:
-        if self.model is None:
-            return
-        self.step(frames / self.model.fps)
+        if self.model is not None:
+            self.step(frames / self.model.fps)
 
     # Editing
 
@@ -359,20 +515,94 @@ class MainWindow(QMainWindow):
         self.timeline.refresh()
 
     def _toggle_mute(self, position: int) -> None:
-        if position >= len(self.tracks):
+        if self.model is None or position >= len(self.tracks):
             return
         track = self.tracks[position]
         track.muted = not track.muted
         self.player.set_gain(position, 0.0 if track.muted else track.gain)
         self.timeline.refresh()
 
+    def _can_save(self, kind: Kind) -> bool:
+        if self.model is None or self.clip is None:
+            return False
+        if self.model.selection < 1 / self.model.fps:
+            return False
+        return kind is Kind.VIDEO or bool(self.tracks)
+
     def _update_labels(self) -> None:
         if self.model is None:
             return
         self.time_label.setText(format_time(self.model.playhead))
         self.selection_label.setText(format_duration(self.model.selection))
+        self.save_video_button.setEnabled(self._can_save(Kind.VIDEO))
+        self.save_audio_button.setEnabled(self._can_save(Kind.AUDIO))
 
-    def closeEvent(self, event) -> None:
+    # Saving
+
+    def save(self, kind: Kind) -> None:
+        if not self._can_save(kind):
+            return
+        clip, m, prefs = self.clip, self.model, self.preferences
+        gains = tuple(0.0 if t.muted else t.gain for t in self.tracks)
+        note = ""
+        replace = kind is Kind.VIDEO and prefs.replace_original
+        target = clip.path.with_suffix(video_extension(clip.path))
+        if replace and self.queue.replacing(clip.path):
+            replace, note = False, strings.JOB_REPLACE_BUSY
+        if replace and target != clip.path and target.exists():
+            replace = False
+        if not replace:
+            target = destination(clip.path, kind, prefs.audio_format, prefs.export_folder, self.queue.reserved())
+        request = Request(
+            source=clip.path,
+            kind=kind,
+            start=m.cut_in,
+            end=m.cut_out,
+            gains=gains,
+            video_codec=clip.video_codec,
+            destination=target,
+            audio_format=prefs.audio_format,
+            replace_original=replace,
+        )
+        job = self.queue.add(request)
+        job.note = note
+
+    def _finish_replace(self, job: Job) -> None:
+        source = job.request.source
+        current = self.clip is not None and self.clip.path == source
+        if current:
+            self.player.unload()
+        self.queue.finish_replace(job)
+        reopen = source
+        if not job.kept_original:
+            self.thumbnails.forget(source)
+            self.memory.pop(source, None)
+            reopen = job.output
+            if self.playlist is not None and source in self.playlist.files:
+                self.playlist.files[self.playlist.files.index(source)] = job.output
+        if current:
+            self.clip = None
+            self.model = None
+            self._open_clip(reopen)
+
+    def open_settings(self) -> None:
+        dialog = SettingsDialog(self.preferences, self)
+        dialog.exec()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self.queue.busy:
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle(strings.QUIT_TITLE)
+            box.setText(strings.QUIT_TEXT)
+            quit_button = box.addButton(strings.QUIT_CONFIRM, QMessageBox.ButtonRole.DestructiveRole)
+            box.addButton(strings.QUIT_KEEP, QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            if box.clickedButton() is not quit_button:
+                event.ignore()
+                return
+        self.queue.shutdown()
+        self.thumbnails.shutdown()
         self.tasks.shutdown()
         self.player.shutdown()
         super().closeEvent(event)

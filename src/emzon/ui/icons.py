@@ -20,6 +20,15 @@ ICONS = {
     "zoom": (_STROKE, '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>'),
     "speaker": (_STROKE, '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 010 7"/>'),
     "speaker-off": (_STROKE, '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9l5 6M21 9l-5 6"/>'),
+    "chevron-left": (_STROKE, '<path d="M15 18l-6-6 6-6"/>'),
+    "chevron-right": (_STROKE, '<path d="M9 18l6-6-6-6"/>'),
+    "sliders": (_STROKE, '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
+    "wave": (_STROKE, '<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/>'),
+    "film": (_STROKE, '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14"/>'),
+    "check": (_STROKE, '<path d="M5 12l5 5 9-10"/>'),
+    "close": (_STROKE, '<path d="M6 6l12 12M18 6L6 18"/>'),
+    "clock": (_STROKE, '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'),
+    "alert": (_STROKE, '<circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/>'),
 }
 
 

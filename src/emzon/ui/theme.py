@@ -17,6 +17,7 @@ MUTED = QColor("#9A93AB")
 FAINT = QColor("#7E7791")
 ACCENT = QColor("#9B7BFF")
 ACCENT_SOFT = QColor("#B9A4FF")
+ON_ACCENT = QColor("#120E1A")
 OK = QColor("#8FE3B0")
 ERROR = QColor("#FF8A9A")
 
@@ -73,6 +74,14 @@ QPushButton {{
 }}
 QPushButton:hover {{ background: {RAISED.name()}; }}
 QPushButton:disabled {{ color: {FAINT.name()}; border-color: {LINE.name()}; }}
+QPushButton[role="primary"] {{
+    background: {ACCENT.name()};
+    color: {ON_ACCENT.name()};
+    border: none;
+    font-weight: 600;
+}}
+QPushButton[role="primary"]:hover {{ background: #AC92FF; }}
+QPushButton[role="primary"]:disabled {{ background: {LINE.name()}; color: {FAINT.name()}; }}
 QPushButton[role="icon"] {{
     border: none;
     border-radius: 10px;
