@@ -12,7 +12,10 @@ Windows 10 and 11 (x64) are the target. Everything except NVENC encoding also ru
 
 ```
 src/emzon/
-  app.py              entry point, window, key handling
+  app.py              entry point
+  window.py           main window, key bindings, wiring
+  tasks.py            background work with results delivered on the UI thread
+  timefmt.py          time and duration formatting
   settings.py         persisted preferences
   media/
     probe.py          ffprobe → Clip (duration, frame rate, codecs, audio tracks)
@@ -31,6 +34,9 @@ src/emzon/
   ui/
     strings.py        every visible string
     theme.py          design tokens
+    icons.py          stroke icons
+    widgets.py        buttons shared by the window
+    fonts/            Geist and Geist Mono (SIL Open Font License)
 ```
 
 `timeline/model.py` and `export/jobs.py` hold the rules that matter most and depend on nothing in Qt, so they are covered by plain unit tests.
