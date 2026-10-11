@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QSettings
+from PySide6.QtCore import QByteArray, QSettings, QStandardPaths
 
 from emzon.export.jobs import AudioFormat
 
@@ -68,3 +68,16 @@ def save_window_geometry(geometry: QByteArray) -> None:
     store = _store()
     store.setValue("window/geometry", geometry)
     store.sync()
+
+
+def videos_folder() -> Path:
+    return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.MoviesLocation))
+
+
+def dialog_start(last_folder: Path | None, videos: Path) -> Path:
+    """Where the open dialogs start: the last folder used if it still exists, else the system Videos folder."""
+    if last_folder is not None and last_folder.is_dir():
+        return last_folder
+    if videos.is_dir():
+        return videos
+    return Path.home()

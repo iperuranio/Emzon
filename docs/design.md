@@ -74,6 +74,7 @@ The button at the far left of the header slides a 300 px panel in from the left,
 
 - A file or folder can be opened from the header or dropped anywhere on the window. Dropping replaces the clip being edited, without asking.
 - A folder opens its most recent clip first. `PgUp` and `PgDn` move through the others.
+- The open dialogs, for files and for folders, start in the folder of the last clip opened, remembered across restarts; the first time, and whenever that folder is gone, they start in the system Videos folder.
 - A clip remembers its cut points for the session, so coming back to it restores them.
 - A new clip opens with the playhead near the end, where the interesting part usually is.
 

@@ -373,15 +373,16 @@ class MainWindow(QMainWindow):
 
     # Opening
 
+    def _dialog_start(self) -> str:
+        return str(settings.dialog_start(self.preferences.last_folder, settings.videos_folder()))
+
     def choose_file(self) -> None:
-        start = str(self.clip.path.parent) if self.clip else ""
-        path, _ = QFileDialog.getOpenFileName(self, strings.OPEN_DIALOG, start, strings.VIDEO_FILTER)
+        path, _ = QFileDialog.getOpenFileName(self, strings.OPEN_DIALOG, self._dialog_start(), strings.VIDEO_FILTER)
         if path:
             self.open_path(Path(path))
 
     def choose_folder(self) -> None:
-        start = str(self.clip.path.parent) if self.clip else str(self.preferences.last_folder or "")
-        folder = QFileDialog.getExistingDirectory(self, strings.OPEN_FOLDER_DIALOG, start)
+        folder = QFileDialog.getExistingDirectory(self, strings.OPEN_FOLDER_DIALOG, self._dialog_start())
         if folder:
             self.open_path(Path(folder))
 
