@@ -1,0 +1,14 @@
+{
+  "products": [
+    {
+      "id": "emzon",
+      "name": "Emzon",
+      "kind": "app",
+      "tagPrefix": "v",
+      "icon": "packaging/icon.png",
+      "platforms": {
+        "win": { "asset": "^Emzon-win-x64\\.zip$", "installer": "win-zip-folder", "exeName": "Emzon.exe" }
+      }
+    }
+  ]
+}

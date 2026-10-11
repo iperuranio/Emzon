@@ -1,0 +1,97 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v[0-9]*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # The app declares its version in src/emzon/__init__.py; a tag that says otherwise stops the build.
+      - name: Version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/emzon/__init__.py)
+          [ -n "$version" ] || { echo "No __version__ in src/emzon/__init__.py"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match version $version"; exit 1
+          fi
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Third-party binaries
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download vendor-1 --repo "$GITHUB_REPOSITORY" --dir packaging/downloads
+          python packaging/fetch_vendor.py packaging/downloads
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pyinstaller==6.22.3
+
+      - name: Check FFmpeg encoders
+        shell: bash
+        run: |
+          encoders=$(vendor/ffmpeg.exe -hide_banner -encoders)
+          for name in h264_nvenc hevc_nvenc av1_nvenc libx264 libx265 libsvtav1 libmp3lame libvorbis aac; do
+            grep -q " $name " <<< "$encoders" || { echo "FFmpeg lacks the $name encoder"; exit 1; }
+          done
+
+      - name: Test
+        shell: bash
+        run: PATH="$PWD/vendor:$PATH" python -m pytest -q
+
+      - name: Build
+        run: pyinstaller --noconfirm --distpath dist --workpath build packaging/emzon.spec
+
+      # The packaged app checks its own tools, libmpv and fonts without opening a window.
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "dist/Emzon/Emzon.exe" -ArgumentList "--self-test", "self-test.json" -Wait -PassThru
+          Get-Content self-test.json
+          if ($process.ExitCode -ne 0) { exit 1 }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Set-Content -Path "dist/Emzon/version.txt" -Value $env:APP_VERSION -Encoding utf8NoBOM -NoNewline
+          Compress-Archive -Path "dist/Emzon/*" -DestinationPath "dist/Emzon-win-x64.zip"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Emzon-win-x64
+          path: dist/Emzon-win-x64.zip
+          # Only carries the build to the release job.
+          retention-days: 1
+
+  release:
+    needs: windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: Emzon-win-x64
+          path: dist
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes \
+            dist/Emzon-win-x64.zip

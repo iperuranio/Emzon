@@ -23,6 +23,13 @@ def main() -> int:
     # libmpv is looked up on PATH when the player module is imported.
     os.environ["PATH"] = f"{bundled_dir()}{os.pathsep}{os.environ.get('PATH', '')}"
 
+    if "--self-test" in sys.argv:
+        from emzon.selftest import run_checks
+
+        position = sys.argv.index("--self-test")
+        report = sys.argv[position + 1] if len(sys.argv) > position + 1 else "self-test.json"
+        return run_checks(Path(report))
+
     if sys.platform == "darwin":
         surface = QSurfaceFormat()
         surface.setVersion(3, 2)

@@ -24,3 +24,4 @@ Thumbs.db
 
 # Third-party binaries, fetched at build time
 vendor/
+packaging/downloads/

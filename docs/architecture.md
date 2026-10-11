@@ -70,7 +70,13 @@ Jobs run one at a time in a background thread, each as an FFmpeg process.
 
 ## Packaging
 
-PyInstaller builds a one-folder app on a GitHub Actions Windows runner, and the installer is made from that folder. FFmpeg, FFprobe and libmpv are downloaded during the build at pinned versions, and each download is checked against a known SHA-256 before it is bundled.
+PyInstaller builds a one-folder app on a GitHub Actions Windows runner (`packaging/emzon.spec`), published as a zip with `version.txt` next to `Emzon.exe`. FFmpeg, FFprobe and libmpv come from exact copies attached to the `vendor-1` release of this repository; `packaging/fetch_vendor.py` checks each archive against the SHA-256 in `packaging/vendor.json` before unpacking it into `vendor/`.
+
+Before packaging, the build checks that FFmpeg has every encoder Emzon uses and runs the test suite with the bundled FFmpeg. After packaging it runs `Emzon.exe --self-test report.json`, which loads libmpv and the fonts and exports a short generated clip, all without opening a window.
+
+A tag `vX.Y.Z` must match `__version__` in `src/emzon/__init__.py`, otherwise the build stops. The release is created with its zip in one step.
+
+On Windows the app keeps a shortcut in `Start Menu\Programs\Metessi` pointing at the running exe, rewritten at start when it is missing or stale, and logs to `%LOCALAPPDATA%\Metessi\Emzon\emzon.log`.
 
 ## Performance
 

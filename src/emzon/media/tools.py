@@ -16,7 +16,7 @@ class ToolMissing(RuntimeError):
 
 def bundled_dir() -> Path:
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).parent / "vendor"
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "vendor"
     return Path(__file__).resolve().parents[3] / "vendor"
 
 

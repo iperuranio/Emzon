@@ -1,0 +1,22 @@
+{
+  "release": "vendor-1",
+  "archives": [
+    {
+      "name": "ffmpeg-9.0.2-full_build-shared.zip",
+      "sha256": "8d31e162f1616e37aab3fa2db991b97e1b8dbeb1c8465fd81a81be16ff91b328",
+      "files": {
+        "ffmpeg-9.0.2-full_build-shared/bin/ffmpeg.exe": "ffmpeg.exe",
+        "ffmpeg-9.0.2-full_build-shared/bin/ffprobe.exe": "ffprobe.exe",
+        "ffmpeg-9.0.2-full_build-shared/bin/*.dll": ".",
+        "ffmpeg-9.0.2-full_build-shared/LICENSE": "licenses/FFmpeg.txt"
+      }
+    },
+    {
+      "name": "mpv-dev-x86_64-20260925-git-2a4eb8067c.7z",
+      "sha256": "bae4b8275f4db6ec5a6bb0c0e5d497c305a2aa9fb065097a0d86bb7b86895c7d",
+      "files": {
+        "libmpv-2.dll": "mpv-2.dll"
+      }
+    }
+  ]
+}

@@ -28,7 +28,7 @@ version = { attr = "emzon.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-"emzon.ui" = ["fonts/*"]
+"emzon.ui" = ["fonts/*", "icon.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
