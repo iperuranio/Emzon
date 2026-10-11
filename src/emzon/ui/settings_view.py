@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 from emzon import __version__, settings
 from emzon.export.jobs import AudioFormat
 from emzon.ui import strings, theme
-from emzon.ui.widgets import PreviewButton
+from emzon.ui.widgets import PreviewToggle
 
 
 class Segmented(QWidget):
@@ -108,7 +108,7 @@ class SettingsDialog(QDialog):
         self.audio.changed.connect(self._audio_changed)
         self._section(column, strings.AUDIO_FORMAT, self.audio)
 
-        self.preview = Segmented([PreviewButton.label(scale) for scale in settings.PREVIEW_SCALES], [strings.PREVIEW_TIP] * 4)
+        self.preview = Segmented([PreviewToggle.label(scale) for scale in settings.PREVIEW_SCALES], [strings.PREVIEW_TIP] * 2)
         self.preview.changed.connect(self._preview_changed)
         self._section(column, strings.PREVIEW_RESOLUTION, self.preview)
 

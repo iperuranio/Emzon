@@ -58,13 +58,13 @@ The track gutter on the left of the timeline is 150 px wide and holds each track
 
 `Q` and `W` also work during playback, cutting where the playhead is at that instant. Cutting the head past the current tail resets the tail to the end of the file, and the reverse.
 
-The two cut actions also have buttons on either side of the play button: `Taglia testa` on the left, `Taglia coda` on the right, each showing its key. These three sit in the exact middle of the bottom bar, whenever the window is wide enough; the playhead time, `Durata` and `Selezione` are on the left, the preview resolution and the save buttons on the right.
+The two cut actions also have buttons on either side of the play button: `Taglia testa` on the left, `Taglia coda` on the right, each showing its key. These three sit in the exact middle of the bottom bar, whenever the window is wide enough; the playhead time, `Durata` and `Selezione` are on the left, the save buttons on the right.
 
 Clip length and selection read in whole seconds (`10 s`, `5:00`); only the playhead time keeps hundredths.
 
 ## Preview resolution
 
-`Piena`, `1/2`, `1/4` or `1/8`, from the button beside the save buttons or from the settings. Below full resolution the player uses a lighter copy of the clip made of keyframes only, so playback and scrubbing stay smooth; the clip plays at full resolution until the copy is ready, then switches without losing position or play state. A ring on the button shows the preparation; exports always use the original.
+A toggle in the header, `Anteprima 1/2`, also in the settings. When on, the player uses a half-resolution copy of the clip made of keyframes only; the clip plays at full resolution until the copy is ready, then switches without losing position or play state. A ring on the toggle shows the preparation; exports always use the original. Lower fractions are not offered: below half resolution a game clip stops being readable.
 
 ## Folder panel
 

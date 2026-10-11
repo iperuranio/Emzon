@@ -42,7 +42,7 @@ from emzon.ui import strings, theme
 from emzon.ui.folder_panel import FolderPanel
 from emzon.ui.queue_view import QueueButton, QueuePopover
 from emzon.ui.settings_view import SettingsDialog
-from emzon.ui.widgets import ActionButton, DropOverlay, ElidedLabel, IconButton, PlayButton, PreviewButton
+from emzon.ui.widgets import ActionButton, DropOverlay, ElidedLabel, IconButton, PlayButton, PreviewToggle
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,6 @@ START_BEFORE_END = 30.0
 END_TOLERANCE = 0.05
 LOADING_DELAY_MS = 300
 THUMBNAIL_REFRESH_MS = 80
-SEEK_INTERVAL_MS = 16
 
 
 @dataclass
@@ -108,8 +107,6 @@ class MainWindow(QMainWindow):
         self._loading_timer = QTimer(self, singleShot=True, interval=LOADING_DELAY_MS)
         self._loading_timer.timeout.connect(self._show_loading)
         self._pending_seek: float | None = None
-        self._seek_timer = QTimer(self, singleShot=True, interval=SEEK_INTERVAL_MS)
-        self._seek_timer.timeout.connect(self._flush_seek)
 
         self.player = MpvWidget()
         self.player.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -189,6 +186,10 @@ class MainWindow(QMainWindow):
         row.addSpacing(10)
         row.addWidget(self.file_label, 1)
 
+        self.preview_button = PreviewToggle(self.preferences.preview_scale)
+        self.preview_button.chosen.connect(self.set_preview_scale)
+        row.addWidget(self.preview_button)
+        row.addSpacing(4)
         self.queue_button = QueueButton(self.queue)
         self.queue_popover = QueuePopover(self.queue, self)
         self.queue_button.clicked.connect(lambda: self.queue_popover.open_below(self.queue_button))
@@ -288,8 +289,6 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.play_button)
         controls.addWidget(self.cut_tail_button)
 
-        self.preview_button = PreviewButton(self.preferences.preview_scale)
-        self.preview_button.chosen.connect(self.set_preview_scale)
         self.save_audio_button = ActionButton(strings.SAVE_AUDIO, "wave", "A", strings.SAVE_AUDIO_TIP)
         self.save_audio_button.clicked.connect(lambda: self.save(Kind.AUDIO))
         self.save_video_button = ActionButton(strings.SAVE_VIDEO, "film", "Invio", strings.SAVE_VIDEO_TIP, primary=True)
@@ -297,8 +296,6 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         actions.setSpacing(10)
         actions.addStretch(1)
-        actions.addWidget(self.preview_button)
-        actions.addSpacing(6)
         actions.addWidget(self.save_audio_button)
         actions.addWidget(self.save_video_button)
 
@@ -644,14 +641,12 @@ class MainWindow(QMainWindow):
         self.play_button.setAccessibleName(strings.PLAY if paused else strings.PAUSE)
 
     def _seek(self, time: float) -> None:
-        """Move the playhead now; the player follows at most once per frame."""
+        """Move the playhead now; the player follows as fast as it can show frames."""
         if self.model is None:
             return
         self.model.move_playhead(time)
         self._pending_seek = self.model.playhead
-        if not self._seek_timer.isActive():
-            self._flush_seek()
-            self._seek_timer.start()
+        self._flush_seek()
         self.timeline.update()
         self._update_labels()
 

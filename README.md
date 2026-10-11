@@ -35,7 +35,7 @@ Le registrazioni di NVIDIA ShadowPlay durano spesso minuti, ma quello che intere
 
 Sulla timeline la rotellina zooma attorno al cursore, `Maiusc` + rotellina o la rotella premuta spostano la vista, un clic sposta la testina senza avviare la riproduzione. Le linee di taglio si trascinano e il tasto destro le toglie.
 
-L'anteprima può girare a 1/2, 1/4 o 1/8 della risoluzione per una riproduzione più fluida: Emzon ne prepara una copia leggera in background, mentre gli export usano sempre l'originale. Il pannello a sinistra mostra le clip della cartella e i dati di quella aperta.
+Per clip molto pesanti l'anteprima può girare a metà risoluzione: Emzon ne prepara una copia leggera in background, mentre gli export usano sempre l'originale. Il pannello a sinistra mostra le clip della cartella e i dati di quella aperta.
 
 ### Installazione
 

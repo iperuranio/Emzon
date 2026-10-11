@@ -22,7 +22,7 @@ class Preferences:
     folder_panel: bool = False
 
 
-PREVIEW_SCALES = (1, 2, 4, 8)
+PREVIEW_SCALES = (1, 2)
 
 
 def _store() -> QSettings:

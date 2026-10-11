@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import QLabel, QMenu, QPushButton, QSizePolicy, QWidget
+from PySide6.QtWidgets import QLabel, QPushButton, QSizePolicy, QWidget
 
-from emzon.settings import PREVIEW_SCALES
 from emzon.ui import icons, strings, theme
 
 KEYCAP_GAP = 10
@@ -116,45 +115,40 @@ class ElidedLabel(QLabel):
         super().setText(self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideMiddle, max(0, self.width())))
 
 
-class PreviewButton(QPushButton):
-    """Chooses the preview resolution; a ring shows while a lighter copy is being prepared."""
+class PreviewToggle(QPushButton):
+    """Half-resolution preview on or off; a ring shows while the lighter copy is being prepared."""
 
     chosen = Signal(int)
 
     def __init__(self, scale: int, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.scale = scale
+        super().__init__(strings.PREVIEW_HALF, parent)
         self.progress: float | None = None
         self.failed = False
+        self.setCheckable(True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet("padding-left: 34px; padding-right: 30px;")
-        menu = QMenu(self)
-        menu.setStyleSheet(
-            f"QMenu {{ background: {theme.LANE.name()}; border: 1px solid {theme.LINE.name()}; border-radius: 10px; padding: 6px; }}"
-            f"QMenu::item {{ padding: 8px 28px 8px 14px; border-radius: 6px; }}"
-            f"QMenu::item:selected {{ background: {theme.RAISED.name()}; }}"
-            f"QMenu::item:checked {{ color: {theme.ACCENT_SOFT.name()}; }}"
+        self.setFixedHeight(36)
+        self.setStyleSheet(
+            f"QPushButton {{ border: 1px solid {theme.LINE.name()}; border-radius: 10px; padding: 0 12px 0 34px;"
+            f" min-height: 34px; font-size: 13px; color: {theme.MUTED.name()}; }}"
+            f"QPushButton:checked {{ border-color: {theme.ACCENT.name()}; color: {theme.ACCENT_SOFT.name()};"
+            f" background: rgba(155, 123, 255, 0.14); }}"
         )
-        self._actions = {}
-        for value in PREVIEW_SCALES:
-            action = menu.addAction(self.label(value))
-            action.setCheckable(True)
-            action.triggered.connect(lambda _checked, v=value: self.chosen.emit(v))
-            self._actions[value] = action
-        self.setMenu(menu)
+        self.toggled.connect(lambda on: self.chosen.emit(2 if on else 1))
         self.set_scale(scale)
+
+    @property
+    def scale(self) -> int:
+        return 2 if self.isChecked() else 1
 
     @staticmethod
     def label(scale: int) -> str:
         return strings.PREVIEW_FULL if scale == 1 else f"1/{scale}"
 
     def set_scale(self, scale: int) -> None:
-        self.scale = scale
-        for value, action in self._actions.items():
-            action.setChecked(value == scale)
-        self.setText(self.label(scale))
-        self.setAccessibleName(f"{strings.PREVIEW} {self.label(scale)}")
+        self.blockSignals(True)
+        self.setChecked(scale > 1)
+        self.blockSignals(False)
         self.set_progress(None)
 
     def set_failed(self, reason: str) -> None:
@@ -169,7 +163,7 @@ class PreviewButton(QPushButton):
         if fraction is None:
             self.setToolTip(strings.PREVIEW_TIP)
         else:
-            self.setToolTip(strings.PREVIEW_PREPARING.format(scale=self.label(self.scale), percent=int(fraction * 100)))
+            self.setToolTip(strings.PREVIEW_PREPARING.format(percent=int(fraction * 100)))
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
@@ -179,13 +173,12 @@ class PreviewButton(QPushButton):
         box = QRectF(12, (self.height() - 16) / 2, 16, 16)
         if self.failed:
             icons.paint(painter, "alert", box, theme.ERROR)
-        elif self.progress is None:
-            icons.paint(painter, "film", box, theme.MUTED)
-        else:
+        elif self.progress is not None:
             painter.setPen(QPen(theme.LINE, 2.2))
             painter.drawEllipse(box.adjusted(1, 1, -1, -1))
             pen = QPen(theme.ACCENT, 2.2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
             painter.drawArc(box.adjusted(1, 1, -1, -1), 90 * 16, -round(360 * 16 * max(0.02, self.progress)))
-        icons.paint(painter, "chevron-down", QRectF(self.width() - 26, (self.height() - 14) / 2, 14, 14), theme.MUTED)
+        else:
+            icons.paint(painter, "gauge", box, theme.ACCENT_SOFT if self.isChecked() else theme.MUTED)
