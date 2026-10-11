@@ -45,7 +45,7 @@ src/emzon/
 
 The video is drawn by libmpv's render API into a `QOpenGLWidget`. Qt owns the window, so the same code runs on both platforms.
 
-Decoding is done in software. Hardware decoders keep a pipeline of frames that must be drained at every seek: on a 1440p60 clip an exact seek took about 250 ms with hardware decoding and 27 ms in software. On a real 1080p120 ShadowPlay clip on a Ryzen 9 9950X3D, software decoding ran at 17.7 times real time using about 2% of the CPU, faster than the GPU path, which still spends CPU time copying frames back.
+Decoding is done in software. Hardware decoders keep a pipeline of frames that must be drained at every seek: on a 1440p60 clip an exact seek took about 250 ms with hardware decoding and 27 ms in software. On a real 1080p120 ShadowPlay clip on a 16-core desktop processor, software decoding ran at 17.7 times real time using about 2% of the CPU, faster than the GPU path, which still spends CPU time copying frames back.
 
 Seeks are flow controlled: while one is in progress, newer targets replace each other and the latest is sent when the current frame is on screen. A flood of seeks would cancel each other before any frame appeared. Scrubbing a clip shaped like a ShadowPlay recording shows about 38 distinct frames per second this way, against 3 to 5 before.
 
