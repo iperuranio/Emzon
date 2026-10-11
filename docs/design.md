@@ -68,7 +68,11 @@ A toggle in the header, `Anteprima 1/2`, also in the settings. When on, the play
 
 ## Folder panel
 
-The button at the far left of the header slides a 300 px panel in from the left, pushing the video aside. On top, the open clip's details: length, resolution, frame rate, codec, audio tracks, size, date. Below, every clip of the folder with its length and size, the open one highlighted; a click opens a clip. The panel remembers whether it was open.
+The panel toggle in the header slides a 360 px panel in from the left, pushing the video aside. On top, the open clip's details: length, resolution, frame rate, codec, audio tracks, size, date. Below, every clip of the folder as a tile, two per row: a frame from three quarters into the clip, its name, its length and size; the open one has a violet frame. A click opens a clip. The panel remembers whether it was open.
+
+## Unreadable files
+
+Files too small to hold a video (under 16 KB, such as recordings that were never finished) are left out of a folder. A clip that turns out unreadable while browsing, opening a folder or reading the folder's details is dropped from the folder and Emzon moves on in the same direction; the error page appears only for a file opened on purpose, or when nothing readable is left. The error states the file, then what went wrong and what to do, wrapped over as many lines as it needs.
 
 ## Opening files
 
