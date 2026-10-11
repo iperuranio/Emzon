@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtGui import QColor, QFont, QFontDatabase
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
 
 BG = QColor("#0E0C13")
 PANEL = QColor("#14111B")
@@ -36,6 +36,31 @@ def track_color(position: int) -> QColor:
 def load_fonts() -> None:
     for file in ("Geist-Variable.ttf", "GeistMono-Variable.ttf"):
         QFontDatabase.addApplicationFont(str(FONTS_DIR / file))
+
+
+def palette() -> QPalette:
+    """Dark colours for everything Qt draws itself, dialogs included."""
+    p = QPalette()
+    roles = {
+        QPalette.ColorRole.Window: PANEL,
+        QPalette.ColorRole.WindowText: TEXT,
+        QPalette.ColorRole.Base: LANE,
+        QPalette.ColorRole.AlternateBase: RAISED,
+        QPalette.ColorRole.Text: TEXT,
+        QPalette.ColorRole.Button: RAISED,
+        QPalette.ColorRole.ButtonText: TEXT,
+        QPalette.ColorRole.Highlight: ACCENT,
+        QPalette.ColorRole.HighlightedText: ON_ACCENT,
+        QPalette.ColorRole.ToolTipBase: LANE,
+        QPalette.ColorRole.ToolTipText: TEXT,
+        QPalette.ColorRole.PlaceholderText: FAINT,
+        QPalette.ColorRole.Link: ACCENT_SOFT,
+    }
+    for role, color in roles.items():
+        p.setColor(role, color)
+    for role in (QPalette.ColorRole.WindowText, QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText):
+        p.setColor(QPalette.ColorGroup.Disabled, role, FAINT)
+    return p
 
 
 def ui_font(pixel_size: int, weight: QFont.Weight = QFont.Weight.Normal) -> QFont:

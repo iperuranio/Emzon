@@ -44,6 +44,8 @@ def main() -> int:
     logging.getLogger(__name__).info("Emzon %s starting, log at %s", __version__, log_file)
     keep_start_menu_shortcut(strings.APP_NAME, APP_USER_MODEL_ID)
 
+    app.setStyle("Fusion")
+    app.setPalette(theme.palette())
     theme.load_fonts()
     app.setFont(theme.ui_font(13))
     app.setStyleSheet(theme.STYLESHEET)

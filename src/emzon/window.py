@@ -637,7 +637,9 @@ class MainWindow(QMainWindow):
             box.setWindowTitle(strings.QUIT_TITLE)
             box.setText(strings.QUIT_TEXT)
             quit_button = box.addButton(strings.QUIT_CONFIRM, QMessageBox.ButtonRole.DestructiveRole)
-            box.addButton(strings.QUIT_KEEP, QMessageBox.ButtonRole.RejectRole)
+            keep = box.addButton(strings.QUIT_KEEP, QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(keep)
+            box.setEscapeButton(keep)
             box.exec()
             if box.clickedButton() is not quit_button:
                 event.ignore()
