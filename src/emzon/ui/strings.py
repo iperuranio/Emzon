@@ -33,11 +33,10 @@ def track_name(position: int, title: str | None) -> str:
 
 LOADING = "Apertura…"
 OPEN_FAILED = "Impossibile aprire «{name}»"
-OPEN_FAILED_DETAIL = "{reason}. Prova con un altro file o controlla che non sia ancora in scrittura."
-TOOL_MISSING = "Manca {tool}: reinstalla Emzon."
-NO_VIDEO = "Il file non contiene un video"
-UNKNOWN_DURATION = "Non si riesce a leggere la durata"
-UNREADABLE = "Il file non è leggibile"
+TOOL_MISSING = "Manca {tool} nella cartella di Emzon. Reinstalla Emzon."
+NO_VIDEO = "Il file non contiene una traccia video. Apri un file video."
+UNKNOWN_DURATION = "La durata non è leggibile. Se il gioco sta ancora registrando, aspetta che finisca."
+UNREADABLE = "FFmpeg non riesce a leggerlo: il file è danneggiato o ancora in scrittura."
 WAVEFORM_FAILED = "Onda non disponibile"
 
 EXPORT_FAILED = "FFmpeg non ha completato l’export"

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QLineF, QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QLineF, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -22,7 +22,7 @@ from PySide6.QtGui import (
     QPolygonF,
     QWheelEvent,
 )
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QToolTip, QWidget
 
 from emzon.media.thumbnails import Thumbnails
 from emzon.media.waveform import Waveform
@@ -353,6 +353,10 @@ class TimelineView(QWidget):
         p.setBrush(theme.LANE)
         p.drawPath(path)
 
+        if track.failed:
+            p.setFont(theme.ui_font(12))
+            p.setPen(theme.FAINT)
+            p.drawText(rect, Qt.AlignmentFlag.AlignCenter, strings.WAVEFORM_FAILED)
         if track.waveform is not None:
             t0 = m.time_at((start - self._content()[0]) / self._content()[1])
             t1 = m.time_at((end - self._content()[0]) / self._content()[1])
@@ -371,13 +375,15 @@ class TimelineView(QWidget):
 
     def _paint_gutter(self, p: QPainter, position: int, track: Track) -> None:
         top = self._lane_top(position)
-        p.setFont(theme.ui_font(13, QFont.Weight.Medium))
-        p.setPen(theme.TEXT if not track.muted else theme.FAINT)
-        p.drawText(QPointF(PAD_X, top + LANE_H / 2 - 6), track.name)
         value = f"{round(track.gain * 100)}%"
         p.setFont(theme.mono_font(12))
+        value_width = p.fontMetrics().horizontalAdvance(value)
         p.setPen(theme.MUTED)
-        p.drawText(QPointF(PAD_X + GUTTER - p.fontMetrics().horizontalAdvance(value), top + LANE_H / 2 - 6), value)
+        p.drawText(QPointF(PAD_X + GUTTER - value_width, top + LANE_H / 2 - 6), value)
+        p.setFont(theme.ui_font(13, QFont.Weight.Medium))
+        p.setPen(theme.TEXT if not track.muted else theme.FAINT)
+        name = p.fontMetrics().elidedText(track.name, Qt.TextElideMode.ElideRight, int(GUTTER - value_width - 10))
+        p.drawText(QPointF(PAD_X, top + LANE_H / 2 - 6), name)
 
         icons.paint(p, "speaker-off" if track.muted else "speaker", self._mute(position).adjusted(3, 3, -3, -3), theme.MUTED)
 
@@ -479,6 +485,31 @@ class TimelineView(QWidget):
         p.fillRect(rect, QBrush(QColor(14, 12, 19, 120), Qt.BrushStyle.BDiagPattern))
 
     # Input
+
+    def event(self, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.ToolTip and self.model is not None:
+            tip = self._tooltip_at(QPointF(event.pos()))
+            if tip:
+                QToolTip.showText(event.globalPos(), tip, self)
+            else:
+                QToolTip.hideText()
+                event.ignore()
+            return True
+        return super().event(event)
+
+    def _tooltip_at(self, pos: QPointF) -> str:
+        if QRectF(PAD_X, PAD_TOP, GUTTER, OVERVIEW_H).contains(pos):
+            return strings.VIEW_TIP
+        if self._overview().contains(pos):
+            return strings.OVERVIEW_TIP
+        for position, track in enumerate(self.tracks):
+            if self._mute(position).contains(pos):
+                return strings.MUTE_TIP.format(key=position + 1) if position < 9 else ""
+            if self._slider(position).adjusted(-8, -6, 8, 6).contains(pos):
+                return strings.VOLUME_TIP
+            if QRectF(PAD_X, self._lane_top(position), GUTTER, 24).contains(pos) and track.name:
+                return track.name
+        return ""
 
     def _in_detail(self, pos: QPointF) -> bool:
         left, width = self._content()

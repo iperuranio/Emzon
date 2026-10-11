@@ -128,12 +128,18 @@ class ExportQueue(QObject):
         self.changed.emit()
 
     def shutdown(self) -> None:
+        """Cancel everything still in the queue and wait briefly for the cleanup."""
         with self._wake:
             self._closing = True
             for job in self.jobs:
-                if job.state.active and job.process is not None:
-                    job.process.kill()
+                if job.state in (State.WAITING, State.RUNNING):
+                    job.state = State.CANCELLED
+                    if job.process is not None:
+                        job.process.kill()
+                elif job.state is State.FINISHING:
+                    _remove(job.request.partial)
             self._wake.notify()
+        self._worker.join(timeout=5)
 
     @property
     def busy(self) -> bool:

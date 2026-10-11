@@ -6,11 +6,11 @@ from pathlib import Path
 
 import numpy as np
 
-from emzon.media.tools import find_tool, run
+from emzon.media.tools import Stream, find_tool
 
 SAMPLE_RATE = 8000
 PEAK_RATE = 400
-DECODE_TIMEOUT = 300
+GROUP = "waveform"
 
 
 class WaveformError(RuntimeError):
@@ -68,14 +68,25 @@ class Waveform:
 
 
 def load_waveform(path: Path, position: int) -> Waveform:
-    result = run(
-        [
-            find_tool("ffmpeg"), "-v", "error", "-i", path,
-            "-map", f"0:a:{position}", "-ac", "1", "-ar", str(SAMPLE_RATE),
-            "-f", "s16le", "-",
-        ],
-        timeout=DECODE_TIMEOUT,
-    )
-    if result.returncode != 0:
-        raise WaveformError(result.stderr.decode(errors="replace").strip() or "ffmpeg failed")
-    return Waveform.from_samples(np.frombuffer(result.stdout, dtype=np.int16))
+    """Decode one track at a low rate, keeping only the peaks, so hours of audio stay small."""
+    args = [
+        find_tool("ffmpeg"), "-v", "error", "-i", path,
+        "-map", f"0:a:{position}", "-ac", "1", "-ar", str(SAMPLE_RATE),
+        "-f", "s16le", "-",
+    ]
+    block = SAMPLE_RATE // PEAK_RATE
+    chunk_bytes = block * 2 * 4096
+    peaks: list[np.ndarray] = []
+    leftover = b""
+    with Stream(args, group=GROUP) as process:
+        while data := process.stdout.read(chunk_bytes):
+            data = leftover + data
+            usable = len(data) - len(data) % (block * 2)
+            leftover = data[usable:]
+            samples = np.frombuffer(data[:usable], dtype=np.int16).astype(np.float32)
+            peaks.append(np.abs(samples / 32768.0).reshape(-1, block).max(axis=1))
+        errors = process.stderr.read().decode(errors="replace").strip()
+        code = process.wait()
+    if code != 0:
+        raise WaveformError(errors or "ffmpeg failed")
+    return Waveform(np.concatenate(peaks) if peaks else np.zeros(1, dtype=np.float32))

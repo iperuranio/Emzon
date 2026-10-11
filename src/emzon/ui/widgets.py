@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, QSize, Qt
-from PySide6.QtGui import QFontMetrics, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import QPushButton, QWidget
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPaintEvent, QPen
+from PySide6.QtWidgets import QLabel, QPushButton, QSizePolicy, QWidget
 
 from emzon.ui import icons, theme
 
@@ -70,3 +70,46 @@ class PlayButton(QPushButton):
 
     def show_playing(self, playing: bool) -> None:
         self.setIcon(icons.icon("pause" if playing else "play", theme.BG, 16))
+
+
+class DropOverlay(QWidget):
+    """A violet frame over the window while a file is dragged onto it."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.hide()
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        tint = QColor(theme.ACCENT)
+        tint.setAlpha(28)
+        painter.fillRect(self.rect(), tint)
+        painter.setPen(QPen(theme.ACCENT, 3))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(QRectF(self.rect()).adjusted(8, 8, -8, -8), 16, 16)
+
+
+class ElidedLabel(QLabel):
+    """A one-line label that shortens long text in the middle instead of widening the window."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full = ""
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+
+    def setText(self, text: str) -> None:
+        self._full = text
+        self.setToolTip(text)
+        self._elide()
+
+    def text(self) -> str:
+        return self._full
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._elide()
+
+    def _elide(self) -> None:
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideMiddle, max(0, self.width())))

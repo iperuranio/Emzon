@@ -46,6 +46,7 @@ class MpvWidget(QOpenGLWidget):
         )
         self._render: mpv.MpvRenderContext | None = None
         self._gains: list[float] = []
+        self._pending: tuple[str, str] | None = None
         self._get_proc_address = mpv.MpvGlGetProcAddressFn(self._proc_address)
 
         self._frame_ready.connect(self.update, Qt.ConnectionType.QueuedConnection)
@@ -65,7 +66,18 @@ class MpvWidget(QOpenGLWidget):
         self._gains = list(gains)
         self.player["lavfi-complex"] = complex_graph(track_count)
         self.player.af = mix_filter(self._gains)
-        self.player.loadfile(str(path), start=f"{start:.6f}")
+        if self._render is None:
+            # Video output needs the render context, which exists once the widget has been shown.
+            self._pending = (str(path), f"{start:.6f}")
+        else:
+            self.player.loadfile(str(path), start=f"{start:.6f}")
+
+    @property
+    def time(self) -> float | None:
+        return self.player.time_pos
+
+    def frame_step(self, forward: bool) -> None:
+        self.player.command("frame-step" if forward else "frame-back-step")
 
     def set_gain(self, position: int, gain: float) -> None:
         self._gains[position] = gain
@@ -103,6 +115,10 @@ class MpvWidget(QOpenGLWidget):
             self.player, "opengl", opengl_init_params={"get_proc_address": self._get_proc_address}
         )
         self._render.update_cb = self._frame_ready.emit
+        if self._pending is not None:
+            path, start = self._pending
+            self._pending = None
+            self.player.loadfile(path, start=start)
 
     def paintGL(self) -> None:
         if self._render is None:

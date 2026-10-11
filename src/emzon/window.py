@@ -26,7 +26,9 @@ from emzon.export.queue import ExportQueue, Job
 from emzon.media.clips import Playlist
 from emzon.media.probe import Clip, ProbeError, probe
 from emzon.media.thumbnails import Thumbnails
+from emzon.media import tools
 from emzon.media.tools import ToolMissing
+from emzon.media.waveform import GROUP as WAVEFORM_GROUP
 from emzon.media.waveform import load_waveform
 from emzon.player.mpv_widget import MpvWidget
 from emzon.tasks import Tasks
@@ -36,7 +38,7 @@ from emzon.timeline.view import TimelineView, Track
 from emzon.ui import strings, theme
 from emzon.ui.queue_view import QueueButton, QueuePopover
 from emzon.ui.settings_view import SettingsDialog
-from emzon.ui.widgets import ActionButton, IconButton, PlayButton
+from emzon.ui.widgets import ActionButton, DropOverlay, ElidedLabel, IconButton, PlayButton
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +46,7 @@ START_BEFORE_END = 30.0
 END_TOLERANCE = 0.05
 LOADING_DELAY_MS = 300
 THUMBNAIL_REFRESH_MS = 80
+SEEK_INTERVAL_MS = 16
 
 
 @dataclass
@@ -65,8 +68,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(strings.APP_NAME)
         self.setAcceptDrops(True)
-        self.resize(1440, 900)
         self.setMinimumSize(1024, 700)
+        if not self.restoreGeometry(settings.window_geometry()):
+            self.resize(1440, 900)
 
         self.preferences = settings.load()
         self.clip: Clip | None = None
@@ -89,6 +93,9 @@ class MainWindow(QMainWindow):
         self.thumbnails.ready.connect(self._thumbnail_timer.start)
         self._loading_timer = QTimer(self, singleShot=True, interval=LOADING_DELAY_MS)
         self._loading_timer.timeout.connect(self._show_loading)
+        self._pending_seek: float | None = None
+        self._seek_timer = QTimer(self, singleShot=True, interval=SEEK_INTERVAL_MS)
+        self._seek_timer.timeout.connect(self._flush_seek)
 
         self.player = MpvWidget()
         self.player.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -111,6 +118,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._build_stage(), 1)
         layout.addWidget(self._build_panel())
         self.setCentralWidget(central)
+        self.drop_overlay = DropOverlay(self)
         self._bind_keys()
         self._show_empty()
 
@@ -150,7 +158,7 @@ class MainWindow(QMainWindow):
         nav.addWidget(self.next_button)
         row.addWidget(self.navigation)
 
-        self.file_label = QLabel()
+        self.file_label = ElidedLabel()
         self.file_label.setFont(theme.ui_font(14, QFont.Weight.Medium))
         row.addSpacing(10)
         row.addWidget(self.file_label, 1)
@@ -310,6 +318,7 @@ class MainWindow(QMainWindow):
 
     def _open_clip(self, path: Path) -> None:
         self._remember()
+        tools.stop_group(WAVEFORM_GROUP)
         self._generation += 1
         self._player_ready = False
         self._loading_path = path
@@ -418,8 +427,15 @@ class MainWindow(QMainWindow):
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if any(url.isLocalFile() for url in event.mimeData().urls()):
             event.acceptProposedAction()
+            self.drop_overlay.setGeometry(self.rect())
+            self.drop_overlay.raise_()
+            self.drop_overlay.show()
+
+    def dragLeaveEvent(self, event) -> None:
+        self.drop_overlay.hide()
 
     def dropEvent(self, event: QDropEvent) -> None:
+        self.drop_overlay.hide()
         paths = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
         paths = [p for p in paths if p.exists()]
         if paths:
@@ -437,30 +453,41 @@ class MainWindow(QMainWindow):
 
     def _on_player_loaded(self) -> None:
         self._player_ready = True
+        self._pending_seek = None
+        if self.model is not None:
+            self.player.seek(self.model.playhead)
 
     def _on_time(self, time: float) -> None:
         if self.model is None or not self._player_ready or self.timeline.scrubbing:
             return
         self.model.move_playhead(time)
-        if not self.player.paused:
-            before = (self.model.view_start, self.model.view_end)
-            self.model.follow_playhead()
-            if before != (self.model.view_start, self.model.view_end):
-                self.timeline.refresh()
+        before = (self.model.view_start, self.model.view_end)
+        self.model.follow_playhead()
+        if before != (self.model.view_start, self.model.view_end):
+            self.timeline.refresh()
         self.timeline.update()
         self._update_labels()
 
     def _on_pause(self, paused: bool) -> None:
         self.play_button.show_playing(not paused)
+        self.play_button.setAccessibleName(strings.PLAY if paused else strings.PAUSE)
 
     def _seek(self, time: float) -> None:
+        """Move the playhead now; the player follows at most once per frame."""
         if self.model is None:
             return
         self.model.move_playhead(time)
-        if self._player_ready:
-            self.player.seek(self.model.playhead)
+        self._pending_seek = self.model.playhead
+        if not self._seek_timer.isActive():
+            self._flush_seek()
+            self._seek_timer.start()
         self.timeline.update()
         self._update_labels()
+
+    def _flush_seek(self) -> None:
+        if self._pending_seek is not None and self._player_ready:
+            self.player.seek(self._pending_seek)
+            self._pending_seek = None
 
     def _scrub_started(self) -> None:
         self._resume_after_scrub = not self.player.paused
@@ -476,20 +503,31 @@ class MainWindow(QMainWindow):
         if self.model is None:
             return
         self.model.step(seconds)
+        self._pending_seek = None
         if self._player_ready:
             self.player.seek(self.model.playhead)
         self.timeline.refresh()
         self._update_labels()
 
     def step_frames(self, frames: int) -> None:
-        if self.model is not None:
-            self.step(frames / self.model.fps)
+        if self.model is None or not self._player_ready:
+            return
+        if not self.player.paused:
+            self.player.set_paused(True)
+        self._flush_seek()
+        self.player.frame_step(frames > 0)
 
     # Editing
+
+    def _sync_playhead(self) -> None:
+        """During playback, take the player's own time rather than the last repaint's."""
+        if self._player_ready and not self.player.paused and (time := self.player.time) is not None:
+            self.model.move_playhead(time)
 
     def cut_head(self) -> None:
         if self.model is None:
             return
+        self._sync_playhead()
         self.model.cut_head()
         self.timeline.refresh()
         self._update_labels()
@@ -497,6 +535,7 @@ class MainWindow(QMainWindow):
     def cut_tail(self) -> None:
         if self.model is None:
             return
+        self._sync_playhead()
         self.model.cut_tail()
         self.timeline.refresh()
         self._update_labels()
@@ -553,11 +592,13 @@ class MainWindow(QMainWindow):
             replace = False
         if not replace:
             target = destination(clip.path, kind, prefs.audio_format, prefs.export_folder, self.queue.reserved())
+        # The frame under the playhead when the tail was cut belongs to the clip.
+        end = min(m.duration, m.cut_out + 1 / m.fps) if m.tail_is_cut else m.duration
         request = Request(
             source=clip.path,
             kind=kind,
             start=m.cut_in,
-            end=m.cut_out,
+            end=end,
             gains=gains,
             video_codec=clip.video_codec,
             destination=target,
@@ -601,8 +642,10 @@ class MainWindow(QMainWindow):
             if box.clickedButton() is not quit_button:
                 event.ignore()
                 return
+        settings.save_window_geometry(self.saveGeometry())
         self.queue.shutdown()
         self.thumbnails.shutdown()
         self.tasks.shutdown()
+        tools.stop_all()
         self.player.shutdown()
         super().closeEvent(event)

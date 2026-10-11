@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
@@ -117,7 +117,6 @@ class SettingsDialog(QDialog):
         self.audio.changed.connect(self._audio_changed)
         self._section(column, strings.AUDIO_FORMAT, self.audio)
 
-        QShortcut(QKeySequence("Esc"), self, activated=self.accept)
         self._show()
 
     def _section(self, column: QVBoxLayout, title: str, control: QWidget) -> None:
