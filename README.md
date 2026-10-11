@@ -37,7 +37,13 @@ Sulla timeline la rotellina zooma attorno al cursore, `Maiusc` + rotellina scorr
 
 ### Installazione
 
-Scarica `Emzon-win-x64.zip` dall'ultima release, estrailo in una cartella e avvia `Emzon.exe`. Serve Windows 10 o 11 a 64 bit; per l'encoding hardware, una scheda NVIDIA.
+Scarica `Emzon-Setup.exe` dall'[ultima release](https://github.com/iperuranio/Emzon/releases/latest) e avvialo: si installa per il tuo utente, senza permessi di amministratore, con la voce nel menu Start e in «Apri con» per i video. Si disinstalla dalle Impostazioni di Windows.
+
+Windows potrebbe avvisare che l'app non è riconosciuta, perché non è firmata: scegli «Ulteriori informazioni» e poi «Esegui comunque».
+
+Chi preferisce la versione portatile scarica `Emzon-win-x64.zip`, lo estrae in una cartella e avvia `Emzon.exe`.
+
+Serve Windows 10 o 11 a 64 bit; per l'encoding hardware, una scheda NVIDIA.
 
 ## English
 
@@ -56,7 +62,13 @@ NVIDIA ShadowPlay recordings often run for minutes while the part worth keeping 
 
 ### Installation
 
-Download `Emzon-win-x64.zip` from the latest release, unzip it into a folder and run `Emzon.exe`. Requires 64-bit Windows 10 or 11; hardware encoding needs an NVIDIA graphics card.
+Download `Emzon-Setup.exe` from the [latest release](https://github.com/iperuranio/Emzon/releases/latest) and run it: it installs for your user, without administrator rights, adds a Start menu entry and an "Open with" entry for videos, and uninstalls from Windows Settings.
+
+Windows may warn that the app is unrecognised, because it is not signed: choose "More info", then "Run anyway".
+
+For a portable copy, download `Emzon-win-x64.zip`, unzip it and run `Emzon.exe`.
+
+Requires 64-bit Windows 10 or 11; hardware encoding needs an NVIDIA graphics card.
 
 ### Development
 

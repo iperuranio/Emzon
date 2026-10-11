@@ -74,6 +74,8 @@ PyInstaller builds a one-folder app on a GitHub Actions Windows runner (`packagi
 
 Before packaging, the build checks that FFmpeg has every encoder Emzon uses and runs the test suite with the bundled FFmpeg. After packaging it runs `Emzon.exe --self-test report.json`, which loads libmpv and the fonts and exports a short generated clip, all without opening a window.
 
+The same folder also becomes `Emzon-Setup.exe` (Inno Setup, `packaging/emzon.iss`): a per-user install in `%LOCALAPPDATA%\Programs\Emzon` that needs no administrator rights, with the Start menu shortcut, an "Open with" entry for video files and an uninstaller. The build installs it silently, runs the self-test on the installed app and uninstalls it, checking that nothing is left behind.
+
 A tag `vX.Y.Z` must match `__version__` in `src/emzon/__init__.py`, otherwise the build stops. The release is created with its zip in one step.
 
 On Windows the app keeps a shortcut in `Start Menu\Programs\Metessi` pointing at the running exe, rewritten at start when it is missing or stale, and logs to `%LOCALAPPDATA%\Metessi\Emzon\emzon.log`.

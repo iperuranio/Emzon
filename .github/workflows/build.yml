@@ -76,10 +76,38 @@ jobs:
           Set-Content -Path "dist/Emzon/version.txt" -Value $env:APP_VERSION -Encoding utf8NoBOM -NoNewline
           Compress-Archive -Path "dist/Emzon/*" -DestinationPath "dist/Emzon-win-x64.zip"
 
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          & $iscc "/DAppVersion=$env:APP_VERSION" packaging\emzon.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # Install for real, check the installed app, uninstall.
+      - name: Installer test
+        shell: pwsh
+        run: |
+          $setup = Start-Process -FilePath "dist\Emzon-Setup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { Write-Error "setup exited with $($setup.ExitCode)"; exit 1 }
+          $app = Join-Path $env:LOCALAPPDATA "Programs\Emzon"
+          $shortcut = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Metessi\Emzon.lnk"
+          if (-not (Test-Path $shortcut)) { Write-Error "no Start menu shortcut"; exit 1 }
+          $check = Start-Process -FilePath (Join-Path $app "Emzon.exe") -ArgumentList "--self-test", "installed.json" -Wait -PassThru
+          Get-Content installed.json
+          if ($check.ExitCode -ne 0) { exit 1 }
+          $remove = Start-Process -FilePath (Join-Path $app "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait -PassThru
+          Start-Sleep -Seconds 3
+          if ($remove.ExitCode -ne 0 -or (Test-Path (Join-Path $app "Emzon.exe")) -or (Test-Path $shortcut)) { Write-Error "uninstall left files behind"; exit 1 }
+
       - uses: actions/upload-artifact@v5
         with:
           name: Emzon-win-x64
-          path: dist/Emzon-win-x64.zip
+          path: |
+            dist/Emzon-win-x64.zip
+            dist/Emzon-Setup.exe
           # Only carries the build to the release job.
           retention-days: 1
 
@@ -98,4 +126,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes \
-            dist/Emzon-win-x64.zip
+            dist/Emzon-Setup.exe dist/Emzon-win-x64.zip
