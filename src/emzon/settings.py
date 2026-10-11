@@ -20,6 +20,7 @@ class Preferences:
     audio_format: AudioFormat = AudioFormat.MP3
     preview_scale: int = 1
     folder_panel: bool = False
+    last_folder: Path | None = None
 
 
 PREVIEW_SCALES = (1, 2)
@@ -43,6 +44,7 @@ def load() -> Preferences:
         audio_format=audio_format,
         preview_scale=scale if scale in PREVIEW_SCALES else 1,
         folder_panel=store.value("window/folder_panel", False, bool),
+        last_folder=Path(last) if (last := store.value("history/last_folder", "", str)) else None,
     )
 
 
@@ -53,6 +55,7 @@ def save(preferences: Preferences) -> None:
     store.setValue("export/audio_format", preferences.audio_format.value)
     store.setValue("preview/scale", preferences.preview_scale)
     store.setValue("window/folder_panel", preferences.folder_panel)
+    store.setValue("history/last_folder", str(preferences.last_folder) if preferences.last_folder else "")
     store.sync()
 
 

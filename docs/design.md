@@ -13,7 +13,7 @@ The reference for how Emzon looks and behaves. When the code and this file disag
 
 From top to bottom:
 
-1. **Header** (56 px). Left: open, previous clip, position in the folder (`3/14`), next clip, file name. Right: render queue (present only while it holds jobs), settings.
+1. **Header** (56 px). Left: `Apri` (a labelled button, the most important action), a divider, the folder panel toggle (a small icon), previous clip, position in the folder (`3/14`), next clip, file name. Right: the half-resolution preview toggle (quiet: no frame, violet text when on), render queue (present only while it holds jobs), settings (a gear). Controls appear only when they have something to act on: with no clip open, the header holds the settings alone.
 2. **Stage.** The video, 16:9, centred, rounded 12 px.
 3. **Timeline panel.** Overview, zoom funnel, ruler, video lane, one lane per audio track, transport bar.
 
@@ -131,7 +131,7 @@ Further tracks continue the violet scale, alternating lightness so neighbours st
 
 ## States
 
-- **Empty:** `Trascina qui una clip` and an `Apri file` button, nothing else.
+- **Empty:** the app icon, `Trascina qui una clip o una cartella`, `Apri file` (primary, `Ctrl+O`) beside `Apri cartella` (`Ctrl+Maiusc+O`), and `Riapri «cartella»` for the last folder used, when it still exists. No panel, no clip controls.
 - **Dragging a file over the window:** a violet frame over the whole window.
 - **Loading:** the previous view stays until the clip is ready; `Apertura…` appears only if opening takes longer than 300 ms.
 - **Error:** the file name in red, then what went wrong and what to do, in one sentence.

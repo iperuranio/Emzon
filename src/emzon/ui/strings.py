@@ -3,11 +3,16 @@
 APP_NAME = "Emzon"
 
 OPEN = "Apri file"
+OPEN_SHORT = "Apri"
 OPEN_TIP = "Apri un video (Ctrl+O)"
 OPEN_DIALOG = "Apri un video"
+OPEN_FOLDER = "Apri cartella"
+OPEN_FOLDER_TIP = "Apri una cartella di clip (Ctrl+Maiusc+O)"
+OPEN_FOLDER_DIALOG = "Apri una cartella di clip"
+REOPEN = "Riapri «{name}»"
 VIDEO_FILTER = "Video (*.mp4 *.mkv *.mov *.webm *.avi);;Tutti i file (*)"
 
-DROP_HINT = "Trascina qui una clip"
+DROP_HINT = "Trascina qui una clip o una cartella"
 
 CUT_HEAD = "Taglia testa"
 CUT_HEAD_TIP = "Taglia tutto prima della testina (Q)"

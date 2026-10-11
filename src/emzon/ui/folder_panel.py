@@ -85,7 +85,9 @@ class FolderPanel(QWidget):
         column.setContentsMargins(16, 16, 8, 8)
         column.setSpacing(10)
 
-        self._details = QGridLayout()
+        self._details_box = QWidget()
+        self._details = QGridLayout(self._details_box)
+        self._details.setContentsMargins(0, 0, 0, 0)
         self._details.setHorizontalSpacing(14)
         self._details.setVerticalSpacing(6)
         self._values: dict[str, QLabel] = {}
@@ -98,7 +100,8 @@ class FolderPanel(QWidget):
             self._details.addWidget(value, row, 1)
             self._values[key] = value
         self._details.setColumnStretch(1, 1)
-        column.addLayout(self._details)
+        self._details_box.hide()
+        column.addWidget(self._details_box)
         column.addSpacing(10)
 
         self._list_title = QLabel()
@@ -159,9 +162,8 @@ class FolderPanel(QWidget):
         item.setData(DETAIL_ROLE, "    ".join(parts))
 
     def show_clip(self, clip: Clip | None) -> None:
+        self._details_box.setVisible(clip is not None)
         if clip is None:
-            for value in self._values.values():
-                value.setText("")
             return
         try:
             info = clip.path.stat()

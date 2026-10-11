@@ -127,12 +127,12 @@ class PreviewToggle(QPushButton):
         self.setCheckable(True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedHeight(36)
+        self.setFixedHeight(32)
         self.setStyleSheet(
-            f"QPushButton {{ border: 1px solid {theme.LINE.name()}; border-radius: 10px; padding: 0 12px 0 34px;"
-            f" min-height: 34px; font-size: 13px; color: {theme.MUTED.name()}; }}"
-            f"QPushButton:checked {{ border-color: {theme.ACCENT.name()}; color: {theme.ACCENT_SOFT.name()};"
-            f" background: rgba(155, 123, 255, 0.14); }}"
+            f"QPushButton {{ border: none; border-radius: 8px; padding: 0 10px 0 32px;"
+            f" min-height: 32px; font-size: 12px; font-weight: 500; color: {theme.FAINT.name()}; background: transparent; }}"
+            f"QPushButton:hover {{ background: {theme.RAISED.name()}; color: {theme.MUTED.name()}; }}"
+            f"QPushButton:checked {{ color: {theme.ACCENT_SOFT.name()}; background: rgba(155, 123, 255, 0.10); }}"
         )
         self.toggled.connect(lambda on: self.chosen.emit(2 if on else 1))
         self.set_scale(scale)
@@ -170,7 +170,7 @@ class PreviewToggle(QPushButton):
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        box = QRectF(12, (self.height() - 16) / 2, 16, 16)
+        box = QRectF(10, (self.height() - 15) / 2, 15, 15)
         if self.failed:
             icons.paint(painter, "alert", box, theme.ERROR)
         elif self.progress is not None:
@@ -181,4 +181,4 @@ class PreviewToggle(QPushButton):
             painter.setPen(pen)
             painter.drawArc(box.adjusted(1, 1, -1, -1), 90 * 16, -round(360 * 16 * max(0.02, self.progress)))
         else:
-            icons.paint(painter, "gauge", box, theme.ACCENT_SOFT if self.isChecked() else theme.MUTED)
+            icons.paint(painter, "gauge", box, theme.ACCENT_SOFT if self.isChecked() else theme.FAINT)

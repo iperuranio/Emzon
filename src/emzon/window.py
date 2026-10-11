@@ -6,8 +6,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QFont, QKeySequence, QShortcut
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QFont, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -38,7 +38,7 @@ from emzon.tasks import Tasks
 from emzon.timefmt import format_length, format_time
 from emzon.timeline.model import Timeline
 from emzon.timeline.view import TimelineView, Track
-from emzon.ui import strings, theme
+from emzon.ui import icons, strings, theme
 from emzon.ui.folder_panel import FolderPanel
 from emzon.ui.queue_view import QueueButton, QueuePopover
 from emzon.ui.settings_view import SettingsDialog
@@ -137,7 +137,6 @@ class MainWindow(QMainWindow):
         layout.addLayout(middle, 1)
         layout.addWidget(self._build_panel())
         self.setCentralWidget(central)
-        self.folder_panel.set_open(self.preferences.folder_panel, animated=False)
         self.drop_overlay = DropOverlay(self)
         self._bind_keys()
         self._show_empty()
@@ -151,20 +150,29 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(20, 0, 16, 0)
         row.setSpacing(6)
 
-        self.folder_button = IconButton("sidebar", strings.FOLDER_TIP)
+        self.open_button = QPushButton(strings.OPEN_SHORT)
+        self.open_button.setIcon(icons.icon("folder-open", theme.TEXT, 18))
+        self.open_button.setIconSize(QSize(18, 18))
+        self.open_button.setToolTip(strings.OPEN_TIP)
+        self.open_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.open_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_button.setStyleSheet("padding: 0 14px 0 10px; min-height: 34px;")
+        self.open_button.clicked.connect(self.choose_file)
+        row.addWidget(self.open_button)
+        row.addSpacing(8)
+        self.header_divider = QWidget()
+        self.header_divider.setFixedSize(1, 20)
+        self.header_divider.setStyleSheet(f"background: {theme.LINE.name()};")
+        row.addWidget(self.header_divider)
+        row.addSpacing(6)
+        self.folder_button = IconButton("sidebar", strings.FOLDER_TIP, size=18)
         self.folder_button.clicked.connect(self.toggle_folder_panel)
         row.addWidget(self.folder_button)
-        open_button = IconButton("folder", strings.OPEN_TIP)
-        open_button.clicked.connect(self.choose_file)
-        row.addWidget(open_button)
 
         self.navigation = QWidget()
         nav = QHBoxLayout(self.navigation)
-        nav.setContentsMargins(6, 0, 0, 0)
+        nav.setContentsMargins(2, 0, 0, 0)
         nav.setSpacing(2)
-        divider = QWidget()
-        divider.setFixedSize(1, 20)
-        divider.setStyleSheet(f"background: {theme.LINE.name()};")
         self.previous_button = IconButton("chevron-left", strings.PREVIOUS_TIP, size=18)
         self.previous_button.clicked.connect(lambda: self.step_clip(-1))
         self.position_label = QLabel()
@@ -174,8 +182,6 @@ class MainWindow(QMainWindow):
         self.position_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.next_button = IconButton("chevron-right", strings.NEXT_TIP, size=18)
         self.next_button.clicked.connect(lambda: self.step_clip(1))
-        nav.addWidget(divider)
-        nav.addSpacing(6)
         nav.addWidget(self.previous_button)
         nav.addWidget(self.position_label)
         nav.addWidget(self.next_button)
@@ -184,7 +190,8 @@ class MainWindow(QMainWindow):
         self.file_label = ElidedLabel()
         self.file_label.setFont(theme.ui_font(14, QFont.Weight.Medium))
         row.addSpacing(10)
-        row.addWidget(self.file_label, 1)
+        row.addWidget(self.file_label, 10)
+        row.addStretch(1)
 
         self.preview_button = PreviewToggle(self.preferences.preview_scale)
         self.preview_button.chosen.connect(self.set_preview_scale)
@@ -194,7 +201,7 @@ class MainWindow(QMainWindow):
         self.queue_popover = QueuePopover(self.queue, self)
         self.queue_button.clicked.connect(lambda: self.queue_popover.open_below(self.queue_button))
         row.addWidget(self.queue_button)
-        settings_button = IconButton("sliders", strings.SETTINGS)
+        settings_button = IconButton("settings", strings.SETTINGS)
         settings_button.clicked.connect(self.open_settings)
         row.addWidget(settings_button)
         return header
@@ -205,16 +212,41 @@ class MainWindow(QMainWindow):
         empty = QWidget()
         column = QVBoxLayout(empty)
         column.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo = QLabel()
+        logo.setPixmap(_logo(72, self.devicePixelRatioF()))
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint = QLabel(strings.DROP_HINT)
         hint.setFont(theme.ui_font(20, QFont.Weight.Medium))
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        open_button = QPushButton(strings.OPEN)
-        open_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        open_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        open_button.clicked.connect(self.choose_file)
+        choose_file = ActionButton(strings.OPEN, "file", "Ctrl+O", strings.OPEN_TIP, primary=True)
+        choose_file.clicked.connect(self.choose_file)
+        choose_folder = ActionButton(strings.OPEN_FOLDER, "folder-open", "Ctrl+Maiusc+O", strings.OPEN_FOLDER_TIP)
+        choose_folder.clicked.connect(self.choose_folder)
+        buttons = QHBoxLayout()
+        buttons.setSpacing(10)
+        buttons.addStretch(1)
+        buttons.addWidget(choose_file)
+        buttons.addWidget(choose_folder)
+        buttons.addStretch(1)
+        self.recent_button = QPushButton()
+        self.recent_button.setIcon(icons.icon("history", theme.MUTED, 16))
+        self.recent_button.setIconSize(QSize(16, 16))
+        self.recent_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.recent_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.recent_button.setStyleSheet(
+            f"QPushButton {{ border: none; color: {theme.MUTED.name()}; padding: 0 10px; min-height: 32px; font-weight: 400; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT.name()}; background: {theme.RAISED.name()}; }}"
+        )
+        self.recent_button.clicked.connect(self._open_recent)
+        column.addStretch(1)
+        column.addWidget(logo)
+        column.addSpacing(22)
         column.addWidget(hint)
-        column.addSpacing(16)
-        column.addWidget(open_button, 0, Qt.AlignmentFlag.AlignCenter)
+        column.addSpacing(22)
+        column.addLayout(buttons)
+        column.addSpacing(14)
+        column.addWidget(self.recent_button, 0, Qt.AlignmentFlag.AlignCenter)
+        column.addStretch(1)
         self.empty_page = empty
 
         video = QWidget()
@@ -330,6 +362,7 @@ class MainWindow(QMainWindow):
             "PgUp": lambda: self.step_clip(-1),
             "PgDown": lambda: self.step_clip(1),
             "Ctrl+O": self.choose_file,
+            "Ctrl+Shift+O": self.choose_folder,
         }
         for number in range(1, 10):
             bindings[str(number)] = lambda position=number - 1: self._toggle_mute(position)
@@ -346,6 +379,16 @@ class MainWindow(QMainWindow):
         if path:
             self.open_path(Path(path))
 
+    def choose_folder(self) -> None:
+        start = str(self.clip.path.parent) if self.clip else str(self.preferences.last_folder or "")
+        folder = QFileDialog.getExistingDirectory(self, strings.OPEN_FOLDER_DIALOG, start)
+        if folder:
+            self.open_path(Path(folder))
+
+    def _open_recent(self) -> None:
+        if self.preferences.last_folder is not None:
+            self.open_path(self.preferences.last_folder)
+
     def open_path(self, path: Path) -> None:
         if path.is_dir():
             playlist = Playlist.of_folder(path)
@@ -355,6 +398,8 @@ class MainWindow(QMainWindow):
         else:
             playlist = Playlist.around(path)
         self.playlist = playlist
+        self.preferences.last_folder = playlist.current.parent
+        settings.save(self.preferences)
         self._open_clip(playlist.current)
 
     def step_clip(self, delta: int) -> None:
@@ -415,6 +460,7 @@ class MainWindow(QMainWindow):
         self.stage.setCurrentWidget(self.video_page)
         self.panel.show()
         self.folder_panel.show_clip(clip)
+        self._sync_chrome()
         try:
             self._library[clip.path] = (clip, clip.path.stat().st_size)
             self.folder_panel.set_detail(clip.path, *self._library[clip.path])
@@ -450,14 +496,31 @@ class MainWindow(QMainWindow):
             self.position_label.setText(playlist.position)
             self.previous_button.setEnabled(playlist.index > 0)
             self.next_button.setEnabled(playlist.index < len(playlist.files) - 1)
-        self._update_folder_panel()
+        self._sync_chrome()
 
     # Folder panel
 
     def toggle_folder_panel(self) -> None:
+        if self.playlist is None:
+            return
         self.preferences.folder_panel = not self.folder_panel.is_open
         settings.save(self.preferences)
-        self.folder_panel.set_open(self.preferences.folder_panel)
+        self._sync_chrome()
+
+    def _sync_chrome(self, animated: bool = True) -> None:
+        """Show only the controls that have something to act on."""
+        has_folder = self.playlist is not None
+        for widget in (self.open_button, self.header_divider, self.folder_button, self.file_label):
+            widget.setVisible(has_folder)
+        self.preview_button.setVisible(self.clip is not None)
+        panel_open = has_folder and self.preferences.folder_panel
+        if panel_open != self.folder_panel.is_open:
+            self.folder_panel.set_open(panel_open, animated)
+        last = self.preferences.last_folder
+        self.recent_button.setVisible(not has_folder and last is not None and last.is_dir())
+        if last is not None:
+            self.recent_button.setText(strings.REOPEN.format(name=last.name))
+            self.recent_button.setToolTip(str(last))
         self._update_folder_panel()
 
     def _update_folder_panel(self) -> None:
@@ -490,6 +553,7 @@ class MainWindow(QMainWindow):
         self.stage.setCurrentWidget(self.empty_page)
         self.panel.hide()
         self._update_navigation()
+        self._sync_chrome(animated=False)
 
     def _show_message(self, title: str, detail: str, error: bool = False) -> None:
         color = theme.ERROR if error else theme.TEXT
@@ -499,9 +563,11 @@ class MainWindow(QMainWindow):
         self.message_detail.setVisible(bool(detail))
         self.stage.setCurrentWidget(self.message_page)
         self.panel.hide()
+        self.preview_button.setVisible(False)
 
     def _show_open_error(self, error: BaseException) -> None:
         self.clip = None
+        self.folder_panel.show_clip(None)
         self.model = None
         self.player.unload()
         self._playing = None
@@ -848,3 +914,10 @@ def _describe(path: Path) -> tuple[Clip | None, int | None]:
         return probe(path), size
     except ProbeError:
         return None, size
+
+
+def _logo(size: int, ratio: float) -> QPixmap:
+    pixmap = QPixmap(str(Path(__file__).with_name("ui") / "icon.png"))
+    scaled = pixmap.scaled(round(size * ratio), round(size * ratio), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    scaled.setDevicePixelRatio(ratio)
+    return scaled

@@ -124,4 +124,9 @@ QPushButton[role="play"] {{
 }}
 QPushButton[role="play"]:hover {{ background: #FFFFFF; }}
 QLabel {{ background: transparent; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 2px; }}
+QScrollBar::handle:vertical {{ background: {LINE.name()}; border-radius: 3px; min-height: 32px; }}
+QScrollBar::handle:vertical:hover {{ background: {LINE_STRONG.name()}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
 """
