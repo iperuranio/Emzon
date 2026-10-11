@@ -95,4 +95,7 @@ class Thumbnails(QObject):
                 self._cache[key] = image
                 while len(self._cache) > CACHE_SIZE:
                     self._cache.popitem(last=False)
-            self.ready.emit()
+            try:
+                self.ready.emit()
+            except RuntimeError:
+                return  # the window is gone

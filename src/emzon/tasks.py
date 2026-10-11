@@ -31,7 +31,10 @@ class Tasks(QObject):
                 result, error = function(*args), None
             except Exception as failure:  # noqa: BLE001  reported to the UI thread
                 result, error = None, failure
-            self.finished.emit(key, result, error)
+            try:
+                self.finished.emit(key, result, error)
+            except RuntimeError:
+                return  # the window is gone
 
     def shutdown(self) -> None:
         """Drop work that has not started yet."""

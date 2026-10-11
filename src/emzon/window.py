@@ -460,11 +460,15 @@ class MainWindow(QMainWindow):
     def _on_time(self, time: float) -> None:
         if self.model is None or not self._player_ready or self.timeline.scrubbing:
             return
-        self.model.move_playhead(time)
-        before = (self.model.view_start, self.model.view_end)
-        self.model.follow_playhead()
-        if before != (self.model.view_start, self.model.view_end):
-            self.timeline.refresh()
+        m = self.model
+        # Follow a playhead the user can see; one they scrolled away from stays where it is.
+        was_visible = m.view_start <= m.playhead <= m.view_end
+        m.move_playhead(time)
+        if was_visible:
+            before = (m.view_start, m.view_end)
+            m.follow_playhead()
+            if before != (m.view_start, m.view_end):
+                self.timeline.refresh()
         self.timeline.update()
         self._update_labels()
 

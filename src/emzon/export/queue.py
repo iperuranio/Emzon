@@ -147,6 +147,13 @@ class ExportQueue(QObject):
 
     # Worker thread
 
+    @staticmethod
+    def _notify(signal, *args) -> None:
+        try:
+            signal.emit(*args)
+        except RuntimeError:
+            pass  # the window is gone while the worker finishes
+
     def _next(self) -> Job | None:
         with self._wake:
             while not self._closing:
@@ -159,7 +166,7 @@ class ExportQueue(QObject):
 
     def _run(self) -> None:
         while (job := self._next()) is not None:
-            self.changed.emit()
+            self._notify(self.changed)
             try:
                 self._export(job)
             except Exception as error:  # noqa: BLE001  a job must never take the queue down
@@ -168,9 +175,9 @@ class ExportQueue(QObject):
                 job.error = str(error) or type(error).__name__
             if job.state is not State.FINISHING:
                 _remove(job.request.partial)
-            self.changed.emit()
+            self._notify(self.changed)
             if job.state is State.FINISHING:
-                self.replace_ready.emit(job)
+                self._notify(self.replace_ready, job)
 
     def _export(self, job: Job) -> None:
         request = job.request
@@ -218,7 +225,7 @@ class ExportQueue(QObject):
             fraction = parse_progress(line, job.request.duration)
             if fraction is not None:
                 job.progress = fraction
-                self.changed.emit()
+                self._notify(self.changed)
             elif "=" not in line and line.strip():
                 errors.append(line.strip())
         code = job.process.wait()
