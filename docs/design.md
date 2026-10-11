@@ -23,7 +23,7 @@ The track gutter on the left of the timeline is 150 px wide and holds each track
 
 ### Zoom and orientation
 
-- **Overview.** The whole file, always. It is exactly as wide as the file appears in the fully zoomed out timeline below it. It shows cut parts hatched, the kept part tinted, the visible window as a white frame and the playhead as a violet line.
+- **Overview.** The whole file, always. It is exactly as wide as the file appears in the fully zoomed out timeline below it. It shows cut parts hatched, the kept part tinted with violet bars standing out of the bar at its ends, the visible window as a white frame and the playhead as a white line with a dark halo and a caret above the bar.
 - **Funnel.** Two lines join the edges of the visible window in the overview to the edges of the file in the detail view. Fully zoomed out they are vertical; zooming in makes them converge on the magnified part.
 - **Readout.** Left of the overview: the length of the file currently visible, then the total (`12,0 s di 5:00`).
 - **File ends.** The detail view may run up to 2% past either end of the file. A real start or end is drawn as a rounded cap with a brighter edge and labelled `Inizio` or `Fine` on the ruler. Where the clip continues beyond the view, the lanes fade out at the edge instead.
@@ -35,6 +35,9 @@ The track gutter on the left of the timeline is 150 px wide and holds each track
 - **Shift + wheel** and horizontal scrolling pan the view.
 - **Click** moves the playhead. It never starts or stops playback: paused stays paused, playing continues from the new point.
 - **Drag** scrubs. Playback, if it was running, pauses during the drag and resumes on release.
+- **Dragging past either edge** of a zoomed view scrolls it, faster the further the pointer goes.
+- **Middle button drag** moves the view.
+- **Cut lines:** the pointer turns into a horizontal resize cursor over them; dragging moves the cut (the frame under it shows in the player), right click removes it. A cut never crosses the other one.
 - **Overview:** click or drag centres the view on that point; double click shows the whole file.
 
 ### Keyboard
@@ -55,7 +58,17 @@ The track gutter on the left of the timeline is 150 px wide and holds each track
 
 `Q` and `W` also work during playback, cutting where the playhead is at that instant. Cutting the head past the current tail resets the tail to the end of the file, and the reverse.
 
-The two cut actions also have buttons on either side of the play button: `Taglia testa` on the left, `Taglia coda` on the right, each showing its key.
+The two cut actions also have buttons on either side of the play button: `Taglia testa` on the left, `Taglia coda` on the right, each showing its key. These three sit in the exact middle of the bottom bar, whenever the window is wide enough; the playhead time, `Durata` and `Selezione` are on the left, the preview resolution and the save buttons on the right.
+
+Clip length and selection read in whole seconds (`10 s`, `5:00`); only the playhead time keeps hundredths.
+
+## Preview resolution
+
+`Piena`, `1/2`, `1/4` or `1/8`, from the button beside the save buttons or from the settings. Below full resolution the player uses a lighter copy of the clip made of keyframes only, so playback and scrubbing stay smooth; the clip plays at full resolution until the copy is ready, then switches without losing position or play state. A ring on the button shows the preparation; exports always use the original.
+
+## Folder panel
+
+The button at the far left of the header slides a 300 px panel in from the left, pushing the video aside. On top, the open clip's details: length, resolution, frame rate, codec, audio tracks, size, date. Below, every clip of the folder with its length and size, the open one highlighted; a click opens a clip. The panel remembers whether it was open.
 
 ## Opening files
 

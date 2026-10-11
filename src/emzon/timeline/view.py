@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QEvent, QLineF, QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QLineF, QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -47,6 +47,10 @@ BAR_STEP = 3
 MAX_GAIN = 1.5
 WHEEL_ZOOM = 0.25
 WHEEL_PAN = 0.1
+HANDLE_REACH = 6
+EDGE_PAN_MS = 16
+EDGE_PAN_FULL = 160
+EDGE_PAN_SHARE = 0.04
 TICK_STEPS = (0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600)
 MAX_TICKS = 10
 
@@ -66,6 +70,7 @@ class TimelineView(QWidget):
     scrub_finished = Signal()
     gain_changed = Signal(int, float)
     mute_toggled = Signal(int)
+    cuts_changed = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -76,6 +81,10 @@ class TimelineView(QWidget):
         self._cache: QPixmap | None = None
         self._drag: str | None = None
         self._drag_track = -1
+        self._drag_x = 0.0
+        self._pan_origin = (0.0, 0.0)
+        self._edge_timer = QTimer(self, interval=EDGE_PAN_MS)
+        self._edge_timer.timeout.connect(self._edge_pan)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
@@ -89,7 +98,7 @@ class TimelineView(QWidget):
 
     @property
     def scrubbing(self) -> bool:
-        return self._drag == "scrub"
+        return self._drag in ("scrub", "cut_in", "cut_out")
 
     def refresh(self) -> None:
         """Redraw everything; for playhead moves alone, update() is enough."""
@@ -215,9 +224,17 @@ class TimelineView(QWidget):
         if m.tail_is_cut:
             self._hatch(p, QRectF(self._ox(m.cut_out), rect.top(), rect.right() - self._ox(m.cut_out), rect.height()))
         kept = QColor(theme.ACCENT)
-        kept.setAlphaF(0.22)
+        kept.setAlphaF(0.3)
         p.fillRect(QRectF(self._ox(m.cut_in), rect.top(), self._ox(m.cut_out) - self._ox(m.cut_in), rect.height()), kept)
         p.restore()
+
+        # The ends of the kept part stand out of the bar, so they read at any zoom.
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(theme.ACCENT)
+        for time, cut in ((m.cut_in, m.head_is_cut), (m.cut_out, m.tail_is_cut)):
+            if cut:
+                x = self._ox(time)
+                p.drawRoundedRect(QRectF(x - 1.5, rect.top() - 4, 3, rect.height() + 8), 1.5, 1.5)
 
         start, end = max(m.view_start, 0.0), min(m.view_end, m.duration)
         frame = QRectF(self._ox(start), rect.top() + 1, max(4.0, self._ox(end) - self._ox(start)), rect.height() - 2)
@@ -445,9 +462,14 @@ class TimelineView(QWidget):
     def _paint_playhead(self, p: QPainter) -> None:
         m = self.model
         rect = self._overview()
-        p.setPen(QPen(theme.ACCENT, 2))
         x = self._ox(m.playhead)
-        p.drawLine(QPointF(x, rect.top() + 2), QPointF(x, rect.bottom() - 2))
+        p.setPen(QPen(QColor(0, 0, 0, 150), 4))
+        p.drawLine(QPointF(x, rect.top() - 2), QPointF(x, rect.bottom() + 2))
+        p.setPen(QPen(theme.TEXT, 2))
+        p.drawLine(QPointF(x, rect.top() - 2), QPointF(x, rect.bottom() + 2))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(theme.TEXT)
+        p.drawPolygon(QPolygonF([QPointF(x - 5, rect.top() - 7), QPointF(x + 5, rect.top() - 7), QPointF(x, rect.top() - 1)]))
 
         if not m.view_start <= m.playhead <= m.view_end:
             return
@@ -498,6 +520,8 @@ class TimelineView(QWidget):
         return super().event(event)
 
     def _tooltip_at(self, pos: QPointF) -> str:
+        if self._handle_at(pos):
+            return strings.CUT_HANDLE_TIP
         if QRectF(PAD_X, PAD_TOP, GUTTER, OVERVIEW_H).contains(pos):
             return strings.VIEW_TIP
         if self._overview().contains(pos):
@@ -543,10 +567,41 @@ class TimelineView(QWidget):
         event.accept()
         self.refresh()
 
+    def _handle_at(self, pos: QPointF) -> str | None:
+        """The cut line under the pointer, if any."""
+        m = self.model
+        if m is None or not self._ruler_top() <= pos.y() <= self._lanes_bottom():
+            return None
+        near = []
+        for name, time, cut in (("cut_in", m.cut_in, m.head_is_cut), ("cut_out", m.cut_out, m.tail_is_cut)):
+            if cut and m.view_start <= time <= m.view_end:
+                distance = abs(pos.x() - self._x(time))
+                if distance <= HANDLE_REACH:
+                    near.append((distance, name))
+        return min(near)[1] if near else None
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if self.model is None or event.button() != Qt.MouseButton.LeftButton:
+        if self.model is None:
             return
         pos = event.position()
+        button = event.button()
+        if button == Qt.MouseButton.MiddleButton and (self._in_detail(pos) or self._overview().contains(pos)):
+            self._drag = "pan"
+            self._pan_origin = (pos.x(), self.model.view_start)
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            return
+        if button == Qt.MouseButton.RightButton:
+            handle = self._handle_at(pos)
+            if handle == "cut_in":
+                self.model.clear_head()
+            elif handle == "cut_out":
+                self.model.clear_tail()
+            if handle:
+                self.cuts_changed.emit()
+                self.refresh()
+            return
+        if button != Qt.MouseButton.LeftButton:
+            return
         for position in range(len(self.tracks)):
             if self._mute(position).contains(pos):
                 self.mute_toggled.emit(position)
@@ -555,24 +610,35 @@ class TimelineView(QWidget):
                 self._drag, self._drag_track = "gain", position
                 self._set_gain_from(pos.x())
                 return
-        if self._overview().contains(pos):
+        handle = self._handle_at(pos)
+        if handle:
+            self._drag = handle
+            self.scrub_started.emit()
+            self._drag_to(pos.x())
+        elif self._overview().contains(pos):
             self._drag = "overview"
             self._center_overview(pos.x())
         elif self._in_detail(pos):
             self._drag = "scrub"
             self.scrub_started.emit()
-            self.playhead_requested.emit(self._time_at_x(pos.x()))
+            self._drag_to(pos.x())
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self.model is None:
             return
         pos = event.position()
-        if self._drag == "scrub":
-            self.playhead_requested.emit(self._time_at_x(pos.x()))
+        if self._drag in ("scrub", "cut_in", "cut_out"):
+            self._drag_to(pos.x())
         elif self._drag == "overview":
             self._center_overview(pos.x())
         elif self._drag == "gain":
             self._set_gain_from(pos.x())
+        elif self._drag == "pan":
+            origin_x, origin_start = self._pan_origin
+            self.model.set_view(origin_start - (pos.x() - origin_x) / self._content()[1] * self.model.span, self.model.span)
+            self.refresh()
+        elif self._handle_at(pos):
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
         else:
             pointing = self._overview().contains(pos) or any(
                 self._mute(i).contains(pos) or self._slider(i).adjusted(-8, -6, 8, 6).contains(pos)
@@ -581,15 +647,52 @@ class TimelineView(QWidget):
             self.setCursor(Qt.CursorShape.PointingHandCursor if pointing else Qt.CursorShape.ArrowCursor)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if self._drag == "scrub":
+        if self._drag in ("scrub", "cut_in", "cut_out"):
             self.scrub_finished.emit()
         self._drag = None
+        self._edge_timer.stop()
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def _drag_to(self, x: float) -> None:
+        """Follow the pointer; past either edge of a zoomed view, the view scrolls by itself."""
+        self._drag_x = x
+        left, width = self._content()
+        time = self._time_at_x(min(max(x, left), left + width))
+        if self._drag == "cut_in":
+            self.model.set_cut_in(time)
+            time = self.model.cut_in
+            self.cuts_changed.emit()
+            self.refresh()
+        elif self._drag == "cut_out":
+            self.model.set_cut_out(time)
+            time = self.model.cut_out
+            self.cuts_changed.emit()
+            self.refresh()
+        self.playhead_requested.emit(time)
+        outside = x < left or x > left + width
+        if outside and not self._edge_timer.isActive():
+            self._edge_timer.start()
+        elif not outside:
+            self._edge_timer.stop()
+
+    def _edge_pan(self) -> None:
+        if self.model is None or self._drag not in ("scrub", "cut_in", "cut_out"):
+            self._edge_timer.stop()
+            return
+        left, width = self._content()
+        overshoot = self._drag_x - left if self._drag_x < left else self._drag_x - (left + width)
+        strength = max(-1.0, min(1.0, overshoot / EDGE_PAN_FULL))
+        before = self.model.view_start
+        self.model.pan(strength * EDGE_PAN_SHARE * self.model.span)
+        if self.model.view_start != before:
+            self.refresh()
+        self._drag_to(self._drag_x)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if self.model is None:
             return
         pos = event.position()
-        if self._overview().contains(pos):
+        if event.button() == Qt.MouseButton.LeftButton and self._overview().contains(pos):
             self.model.show_all()
             self.refresh()
             return

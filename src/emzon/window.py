@@ -6,12 +6,13 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -28,19 +29,20 @@ from emzon.export.queue import ExportQueue, Job
 from emzon.media.clips import Playlist
 from emzon.media.probe import Clip, ProbeError, probe
 from emzon.media.thumbnails import Thumbnails
-from emzon.media import tools
+from emzon.media import proxy, tools
 from emzon.media.tools import ToolMissing
 from emzon.media.waveform import GROUP as WAVEFORM_GROUP
 from emzon.media.waveform import load_waveform
 from emzon.player.mpv_widget import MpvWidget
 from emzon.tasks import Tasks
-from emzon.timefmt import format_duration, format_time
+from emzon.timefmt import format_length, format_time
 from emzon.timeline.model import Timeline
 from emzon.timeline.view import TimelineView, Track
 from emzon.ui import strings, theme
+from emzon.ui.folder_panel import FolderPanel
 from emzon.ui.queue_view import QueueButton, QueuePopover
 from emzon.ui.settings_view import SettingsDialog
-from emzon.ui.widgets import ActionButton, DropOverlay, ElidedLabel, IconButton, PlayButton
+from emzon.ui.widgets import ActionButton, DropOverlay, ElidedLabel, IconButton, PlayButton, PreviewButton
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +68,8 @@ class Snapshot:
 
 
 class MainWindow(QMainWindow):
+    _proxy_progress = Signal(int, float)
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(strings.APP_NAME)
@@ -84,9 +88,17 @@ class MainWindow(QMainWindow):
         self._loading_path: Path | None = None
         self._player_ready = False
         self._resume_after_scrub = False
+        self._resume_after_load = False
+        self._playing: Path | None = None
 
         self.tasks = Tasks(self)
         self.tasks.finished.connect(self._on_task)
+        self.library_tasks = Tasks(self)
+        self.library_tasks.finished.connect(self._on_library)
+        self._library: dict[Path, tuple[Clip | None, int | None]] = {}
+        self.proxy_tasks = Tasks(self, workers=1)
+        self.proxy_tasks.finished.connect(self._on_proxy)
+        self._proxy_progress.connect(self._on_proxy_progress)
         self.queue = ExportQueue(self)
         self.queue.replace_ready.connect(self._finish_replace)
         self.thumbnails = Thumbnails(self)
@@ -111,15 +123,24 @@ class MainWindow(QMainWindow):
         self.timeline.scrub_finished.connect(self._scrub_finished)
         self.timeline.gain_changed.connect(self._set_gain)
         self.timeline.mute_toggled.connect(self._toggle_mute)
+        self.timeline.cuts_changed.connect(self._update_labels)
 
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self._build_header())
-        layout.addWidget(self._build_stage(), 1)
+        middle = QHBoxLayout()
+        middle.setContentsMargins(0, 0, 0, 0)
+        middle.setSpacing(0)
+        self.folder_panel = FolderPanel()
+        self.folder_panel.open_requested.connect(self._open_from_panel)
+        middle.addWidget(self.folder_panel)
+        middle.addWidget(self._build_stage(), 1)
+        layout.addLayout(middle, 1)
         layout.addWidget(self._build_panel())
         self.setCentralWidget(central)
+        self.folder_panel.set_open(self.preferences.folder_panel, animated=False)
         self.drop_overlay = DropOverlay(self)
         self._bind_keys()
         self._show_empty()
@@ -133,6 +154,9 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(20, 0, 16, 0)
         row.setSpacing(6)
 
+        self.folder_button = IconButton("sidebar", strings.FOLDER_TIP)
+        self.folder_button.clicked.connect(self.toggle_folder_panel)
+        row.addWidget(self.folder_button)
         open_button = IconButton("folder", strings.OPEN_TIP)
         open_button.clicked.connect(self.choose_file)
         row.addWidget(open_button)
@@ -229,9 +253,28 @@ class MainWindow(QMainWindow):
 
         bar = QWidget()
         bar.setFixedHeight(64)
-        row = QHBoxLayout(bar)
-        row.setContentsMargins(24, 0, 24, 8)
-        row.setSpacing(10)
+        grid = QGridLayout(bar)
+        grid.setContentsMargins(24, 0, 24, 8)
+        grid.setHorizontalSpacing(10)
+
+        self.time_label = QLabel()
+        self.time_label.setFont(theme.mono_font(20, QFont.Weight.Medium))
+        self.time_label.setMinimumWidth(110)
+        self.length_label = QLabel()
+        self.selection_label = QLabel()
+        times = QHBoxLayout()
+        times.setSpacing(6)
+        times.addWidget(self.time_label)
+        times.addSpacing(10)
+        for name, value in ((strings.LENGTH, self.length_label), (strings.SELECTION, self.selection_label)):
+            label = QLabel(name)
+            label.setStyleSheet(f"color: {theme.MUTED.name()};")
+            value.setFont(theme.mono_font(13))
+            times.addWidget(label)
+            times.addWidget(value)
+            times.addSpacing(8)
+        self.selection_label.setStyleSheet(f"color: {theme.ACCENT_SOFT.name()};")
+        times.addStretch(1)
 
         self.cut_head_button = ActionButton(strings.CUT_HEAD, "cut-head", "Q", strings.CUT_HEAD_TIP)
         self.cut_head_button.clicked.connect(self.cut_head)
@@ -239,32 +282,38 @@ class MainWindow(QMainWindow):
         self.play_button.clicked.connect(self.toggle_play)
         self.cut_tail_button = ActionButton(strings.CUT_TAIL, "cut-tail", "W", strings.CUT_TAIL_TIP)
         self.cut_tail_button.clicked.connect(self.cut_tail)
+        controls = QHBoxLayout()
+        controls.setSpacing(10)
+        controls.addWidget(self.cut_head_button)
+        controls.addWidget(self.play_button)
+        controls.addWidget(self.cut_tail_button)
 
-        self.time_label = QLabel()
-        self.time_label.setFont(theme.mono_font(20, QFont.Weight.Medium))
-        self.time_label.setMinimumWidth(110)
-        selection_name = QLabel(strings.SELECTION)
-        selection_name.setStyleSheet(f"color: {theme.MUTED.name()};")
-        self.selection_label = QLabel()
-        self.selection_label.setFont(theme.mono_font(13))
-        self.selection_label.setStyleSheet(f"color: {theme.ACCENT_SOFT.name()};")
-
+        self.preview_button = PreviewButton(self.preferences.preview_scale)
+        self.preview_button.chosen.connect(self.set_preview_scale)
         self.save_audio_button = ActionButton(strings.SAVE_AUDIO, "wave", "A", strings.SAVE_AUDIO_TIP)
         self.save_audio_button.clicked.connect(lambda: self.save(Kind.AUDIO))
         self.save_video_button = ActionButton(strings.SAVE_VIDEO, "film", "Invio", strings.SAVE_VIDEO_TIP, primary=True)
         self.save_video_button.clicked.connect(lambda: self.save(Kind.VIDEO))
+        actions = QHBoxLayout()
+        actions.setSpacing(10)
+        actions.addStretch(1)
+        actions.addWidget(self.preview_button)
+        actions.addSpacing(6)
+        actions.addWidget(self.save_audio_button)
+        actions.addWidget(self.save_video_button)
 
-        row.addWidget(self.cut_head_button)
-        row.addWidget(self.play_button)
-        row.addWidget(self.cut_tail_button)
-        row.addSpacing(14)
-        row.addWidget(self.time_label)
-        row.addSpacing(6)
-        row.addWidget(selection_name)
-        row.addWidget(self.selection_label)
-        row.addStretch(1)
-        row.addWidget(self.save_audio_button)
-        row.addWidget(self.save_video_button)
+        left, right, middle = QWidget(), QWidget(), QWidget()
+        left.setLayout(times)
+        right.setLayout(actions)
+        middle.setLayout(controls)
+        for layout in (times, actions, controls):
+            layout.setContentsMargins(0, 0, 0, 0)
+        grid.addWidget(left, 0, 0)
+        grid.addWidget(middle, 0, 1)
+        grid.addWidget(right, 0, 2)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(2, 1)
+        self._transport = (grid, left, middle, right)
         column.addWidget(bar)
         return self.panel
 
@@ -321,8 +370,10 @@ class MainWindow(QMainWindow):
     def _open_clip(self, path: Path) -> None:
         self._remember()
         tools.stop_group(WAVEFORM_GROUP)
+        tools.stop_group(proxy.GROUP)
         self._generation += 1
         self._player_ready = False
+        self._playing = None
         self._loading_path = path
         self.player.set_paused(True)
         self.file_label.setText(path.name)
@@ -361,12 +412,17 @@ class MainWindow(QMainWindow):
         self.tracks = [Track(strings.track_name(t.position, t.title)) for t in clip.audio]
         self._restore(clip)
         self.timeline.set_content(self.model, self.tracks, clip.path, self.thumbnails)
-        gains = [0.0 if t.muted else t.gain for t in self.tracks]
-        self.player.open(clip.path, len(self.tracks), gains, self.model.playhead)
+        self._play_file(self._preview_source(clip))
         for track in clip.audio:
             self.tasks.submit(("waveform", self._generation, track.position), load_waveform, clip.path, track.position)
         self.stage.setCurrentWidget(self.video_page)
         self.panel.show()
+        self.folder_panel.show_clip(clip)
+        try:
+            self._library[clip.path] = (clip, clip.path.stat().st_size)
+            self.folder_panel.set_detail(clip.path, *self._library[clip.path])
+        except OSError:
+            pass
         self._update_labels()
 
     def _remember(self) -> None:
@@ -397,6 +453,41 @@ class MainWindow(QMainWindow):
             self.position_label.setText(playlist.position)
             self.previous_button.setEnabled(playlist.index > 0)
             self.next_button.setEnabled(playlist.index < len(playlist.files) - 1)
+        self._update_folder_panel()
+
+    # Folder panel
+
+    def toggle_folder_panel(self) -> None:
+        self.preferences.folder_panel = not self.folder_panel.is_open
+        settings.save(self.preferences)
+        self.folder_panel.set_open(self.preferences.folder_panel)
+        self._update_folder_panel()
+
+    def _update_folder_panel(self) -> None:
+        if self.playlist is None:
+            return
+        self.folder_panel.set_clips(self.playlist.files, self.playlist.current)
+        for path in self.playlist.files:
+            known = self._library.get(path)
+            if known is not None:
+                self.folder_panel.set_detail(path, *known)
+            elif self.folder_panel.is_open:
+                self._library[path] = (None, None)
+                self.library_tasks.submit(("library", path), _describe, path)
+
+    def _on_library(self, key, result, error) -> None:
+        _kind, path = key
+        if error:
+            log.info("cannot describe %s: %s", path.name, error)
+            result = (None, None)
+        self._library[path] = result
+        self.folder_panel.set_detail(path, *result)
+
+    def _open_from_panel(self, path: Path) -> None:
+        if self.playlist is None or path not in self.playlist.files or path == self.playlist.current:
+            return
+        self.playlist.index = self.playlist.files.index(path)
+        self._open_clip(path)
 
     def _show_empty(self) -> None:
         self.stage.setCurrentWidget(self.empty_page)
@@ -416,6 +507,7 @@ class MainWindow(QMainWindow):
         self.clip = None
         self.model = None
         self.player.unload()
+        self._playing = None
         if isinstance(error, ToolMissing):
             detail = strings.TOOL_MISSING.format(tool=error.args[0])
         elif isinstance(error, ProbeError) and str(error) == "no video stream":
@@ -425,6 +517,20 @@ class MainWindow(QMainWindow):
         else:
             detail = strings.UNREADABLE
         self._show_message(strings.OPEN_FAILED.format(name=self.file_label.text()), detail, error=True)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._center_controls()
+
+    def _center_controls(self) -> None:
+        """Equal sides keep cut and play in the exact middle, as long as the window is wide enough."""
+        grid, left, middle, right = self._transport
+        side = max(left.sizeHint().width(), right.sizeHint().width())
+        margins = grid.contentsMargins()
+        room = self.width() - margins.left() - margins.right() - 2 * grid.horizontalSpacing()
+        fits = room >= 2 * side + middle.sizeHint().width()
+        for column in (0, 2):
+            grid.setColumnMinimumWidth(column, side if fits else 0)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if any(url.isLocalFile() for url in event.mimeData().urls()):
@@ -458,6 +564,65 @@ class MainWindow(QMainWindow):
         self._pending_seek = None
         if self.model is not None:
             self.player.seek(self.model.playhead)
+        if self._resume_after_load:
+            self._resume_after_load = False
+            self.player.set_paused(False)
+
+    # Preview resolution
+
+    def _play_file(self, path: Path) -> None:
+        """Load the clip or its preview copy, keeping position and play state."""
+        if self.model is None or path == self._playing:
+            return
+        self._resume_after_load = self._playing is not None and not self.player.paused
+        self._playing = path
+        self._player_ready = False
+        gains = [0.0 if t.muted else t.gain for t in self.tracks]
+        self.player.open(path, len(self.tracks), gains, self.model.playhead)
+
+    def _preview_source(self, clip: Clip) -> Path:
+        """The preview copy if it is ready; otherwise the clip, while the copy is made."""
+        scale = self.preferences.preview_scale
+        self.preview_button.set_progress(None)
+        if scale == 1:
+            return clip.path
+        try:
+            ready = proxy.existing(clip.path, scale)
+        except OSError as error:
+            log.warning("preview copy of %s: %s", clip.path.name, error)
+            ready = None
+        if ready is not None:
+            return ready
+        tools.stop_group(proxy.GROUP)
+        self.preview_button.set_progress(0.0)
+        generation = self._generation
+        self.proxy_tasks.submit(
+            ("proxy", generation, scale), proxy.build, clip.path, scale, clip.duration,
+            lambda fraction: self._proxy_progress.emit(generation, fraction),
+        )
+        return clip.path
+
+    def _on_proxy_progress(self, generation: int, fraction: float) -> None:
+        if generation == self._generation and self.preview_button.progress is not None:
+            self.preview_button.set_progress(fraction)
+
+    def _on_proxy(self, key, result, error) -> None:
+        _kind, generation, scale = key
+        if generation != self._generation or scale != self.preferences.preview_scale or self.clip is None:
+            return
+        if error:
+            log.warning("preview copy of %s failed: %s", self.clip.path.name, error)
+            self.preview_button.set_failed(str(error).splitlines()[-1] if str(error) else type(error).__name__)
+            return
+        self.preview_button.set_progress(None)
+        self._play_file(result)
+
+    def set_preview_scale(self, scale: int) -> None:
+        self.preferences.preview_scale = scale
+        settings.save(self.preferences)
+        self.preview_button.set_scale(scale)
+        if self.clip is not None:
+            self._play_file(self._preview_source(self.clip))
 
     def _on_time(self, time: float) -> None:
         if self.model is None or not self._player_ready or self.timeline.scrubbing:
@@ -578,7 +743,8 @@ class MainWindow(QMainWindow):
         if self.model is None:
             return
         self.time_label.setText(format_time(self.model.playhead))
-        self.selection_label.setText(format_duration(self.model.selection))
+        self.length_label.setText(format_length(self.model.duration))
+        self.selection_label.setText(format_length(self.model.selection))
         self.save_video_button.setEnabled(self._can_save(Kind.VIDEO))
         self.save_audio_button.setEnabled(self._can_save(Kind.AUDIO))
 
@@ -619,8 +785,10 @@ class MainWindow(QMainWindow):
         current = self.clip is not None and self.clip.path == source
         if current:
             self.player.unload()
+            self._playing = None
         self.queue.finish_replace(job)
         reopen = source
+        self._library.pop(source, None)
         if not job.kept_original:
             self.thumbnails.forget(source)
             self.memory.pop(source, None)
@@ -634,7 +802,12 @@ class MainWindow(QMainWindow):
 
     def open_settings(self) -> None:
         dialog = SettingsDialog(self.preferences, self)
+        dialog.changed.connect(self._settings_changed)
         dialog.exec()
+
+    def _settings_changed(self, preferences: settings.Preferences) -> None:
+        if preferences.preview_scale != self.preview_button.scale:
+            self.set_preview_scale(preferences.preview_scale)
 
     def can_quit(self) -> bool:
         """Whether another copy may close this one: never while exports would be lost."""
@@ -666,6 +839,17 @@ class MainWindow(QMainWindow):
         self.queue.shutdown()
         self.thumbnails.shutdown()
         self.tasks.shutdown()
+        self.library_tasks.shutdown()
+        self.proxy_tasks.shutdown()
         tools.stop_all()
         self.player.shutdown()
         super().closeEvent(event)
+
+
+def _describe(path: Path) -> tuple[Clip | None, int | None]:
+    """What the folder panel shows for a clip: its probe and its size."""
+    size = path.stat().st_size
+    try:
+        return probe(path), size
+    except ProbeError:
+        return None, size

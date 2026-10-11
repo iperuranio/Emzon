@@ -108,6 +108,20 @@ class Timeline:
         if self.cut_out <= self.cut_in:
             self.cut_in = 0.0
 
+    def set_cut_in(self, time: float) -> None:
+        """Move the head cut, never past the tail (one frame stays selected)."""
+        self.cut_in = min(max(time, 0.0), max(0.0, self.cut_out - 1 / self.fps))
+
+    def set_cut_out(self, time: float) -> None:
+        """Move the tail cut, never before the head (one frame stays selected)."""
+        self.cut_out = max(min(time, self.duration), min(self.duration, self.cut_in + 1 / self.fps))
+
+    def clear_head(self) -> None:
+        self.cut_in = 0.0
+
+    def clear_tail(self) -> None:
+        self.cut_out = self.duration
+
     def fit_selection(self) -> None:
         """Frame the kept part; if it is already framed, show the whole file."""
         padding = self.selection * 0.06

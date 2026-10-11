@@ -18,6 +18,11 @@ class Preferences:
     export_folder: Path | None = None
     replace_original: bool = False
     audio_format: AudioFormat = AudioFormat.MP3
+    preview_scale: int = 1
+    folder_panel: bool = False
+
+
+PREVIEW_SCALES = (1, 2, 4, 8)
 
 
 def _store() -> QSettings:
@@ -31,10 +36,13 @@ def load() -> Preferences:
         audio_format = AudioFormat(store.value("export/audio_format", AudioFormat.MP3.value, str))
     except ValueError:
         audio_format = AudioFormat.MP3
+    scale = store.value("preview/scale", 1, int)
     return Preferences(
         export_folder=Path(folder) if folder else None,
         replace_original=store.value("export/replace_original", False, bool),
         audio_format=audio_format,
+        preview_scale=scale if scale in PREVIEW_SCALES else 1,
+        folder_panel=store.value("window/folder_panel", False, bool),
     )
 
 
@@ -43,6 +51,8 @@ def save(preferences: Preferences) -> None:
     store.setValue("export/folder", str(preferences.export_folder) if preferences.export_folder else "")
     store.setValue("export/replace_original", preferences.replace_original)
     store.setValue("export/audio_format", preferences.audio_format.value)
+    store.setValue("preview/scale", preferences.preview_scale)
+    store.setValue("window/folder_panel", preferences.folder_panel)
     store.sync()
 
 

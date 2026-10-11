@@ -114,6 +114,15 @@ jobs:
           $check = Start-Process -FilePath (Join-Path $app "Emzon.exe") -ArgumentList "--self-test", "installed.json" -Wait -PassThru
           Get-Content installed.json
           if ($check.ExitCode -ne 0) { exit 1 }
+          # Pretend an older version is installed: running the setup again must update it.
+          $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6E1F4A2B-8C3D-4E5F-9A7B-2C1D0E9F8A6B}_is1"
+          Set-ItemProperty -Path $key -Name DisplayVersion -Value "0.0.1"
+          $update = Start-Process -FilePath "dist\Emzon-Setup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=update.log" -Wait -PassThru
+          if ($update.ExitCode -ne 0) { Write-Error "update exited with $($update.ExitCode)"; exit 1 }
+          if (-not (Select-String -Path update.log -Pattern "Emzon: updating from 0.0.1 to $env:APP_VERSION" -Quiet)) { Get-Content update.log; Write-Error "the setup did not see the installed version"; exit 1 }
+          $now = (Get-ItemProperty -Path $key).DisplayVersion
+          if ($now -ne $env:APP_VERSION) { Write-Error "installed version is $now after the update"; exit 1 }
+          Write-Output "updated 0.0.1 to $now"
           $remove = Start-Process -FilePath (Join-Path $app "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait -PassThru
           Start-Sleep -Seconds 3
           if ($remove.ExitCode -ne 0 -or (Test-Path (Join-Path $app "Emzon.exe")) -or (Test-Path $shortcut)) { Write-Error "uninstall left files behind"; exit 1 }

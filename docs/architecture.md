@@ -55,6 +55,10 @@ mpv plays one audio stream, while a ShadowPlay file can carry several. The track
 
 Export builds the same graph in its own `filter_complex`, so what you hear is what gets saved.
 
+## Preview copies
+
+At `1/2`, `1/4` or `1/8` preview resolution, `media/proxy.py` writes a scaled, keyframe-only H.264 copy of the clip with its audio tracks copied as they are, trying NVENC first and the CPU otherwise. Copies live in the cache folder (`%LOCALAPPDATA%\Metessi\Emzon\cache\previews` on Windows), named after the clip's path, size, date and scale, and the least recently used ones go once they pass 3 GB. Only the player uses them; probing, waveforms, thumbnails and exports read the original.
+
 ## Waveforms and thumbnails
 
 Each audio track is decoded once by FFmpeg to low-rate mono PCM and reduced to a pyramid of peak values, so every zoom level draws from a level of matching resolution. Thumbnails come from keyframes, scaled down, and load lazily for the visible range. Both run in background threads and are cached by file path, size and modification time.
@@ -73,6 +77,8 @@ Jobs run one at a time in a background thread, each as an FFmpeg process.
 PyInstaller builds a one-folder app on a GitHub Actions Windows runner (`packaging/emzon.spec`), published as a zip with `version.txt` next to `Emzon.exe`. FFmpeg, FFprobe and libmpv come from exact copies attached to the `vendor-1` release of this repository; `packaging/fetch_vendor.py` checks each archive against the SHA-256 in `packaging/vendor.json` before unpacking it into `vendor/`.
 
 Before packaging, the build checks that FFmpeg has every encoder Emzon uses and runs the test suite with the bundled FFmpeg. After packaging it runs `Emzon.exe --self-test report.json`, which loads libmpv and the fonts and exports a short generated clip, all without opening a window.
+
+The installer also updates: it reads the installed version from the uninstall entry, compares it numerically and, when it differs, its pages say it is an update (or a downgrade), and it asks a running Emzon to close with `--quit` before replacing files. The build checks this path too, by faking an older installed version and running the setup again.
 
 The same folder also becomes `Emzon-Setup.exe` (Inno Setup, `packaging/emzon.iss`): a per-user install in `%LOCALAPPDATA%\Programs\Emzon` that needs no administrator rights, with the Start menu shortcut, an "Open with" entry for video files and an uninstaller. The build installs it silently, runs the self-test on the installed app and uninstalls it, checking that nothing is left behind.
 

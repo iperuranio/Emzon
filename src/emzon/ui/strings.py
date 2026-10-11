@@ -72,7 +72,6 @@ VIDEO_SAVE_COPY = "Crea una copia"
 VIDEO_SAVE_REPLACE = "Sostituisci l’originale"
 VIDEO_SAVE_REPLACE_TIP = "Il file originale va nel Cestino e al suo posto resta la versione tagliata"
 AUDIO_FORMAT = "Formato audio"
-CLOSE = "Chiudi"
 
 NO_CLIPS = "Nessuna clip in «{name}»"
 NO_CLIPS_DETAIL = "La cartella non contiene video .mp4, .mkv, .mov, .m4v, .webm o .avi."
@@ -80,3 +79,24 @@ QUIT_TITLE = "Export in corso"
 QUIT_TEXT = "Chiudendo Emzon gli export in coda vengono annullati."
 QUIT_CONFIRM = "Chiudi e annulla"
 QUIT_KEEP = "Resta aperto"
+CUT_HANDLE_TIP = "Trascina per spostare il taglio. Tasto destro: rimuovi il taglio"
+LENGTH = "Durata"
+PREVIEW = "Anteprima"
+PREVIEW_TIP = "Risoluzione dell’anteprima. Più bassa è, più fluidi sono riproduzione e trascinamento; l’export usa sempre l’originale"
+PREVIEW_PREPARING = "Preparazione dell’anteprima {scale}: {percent}%"
+PREVIEW_FULL = "Piena"
+PREVIEW_RESOLUTION = "Risoluzione dell’anteprima"
+ABOUT = "Emzon {version}, di {author}"
+AUTHOR = "Claudio Portuesi (Metessi)"
+PREVIEW_FAILED = "Anteprima leggera non disponibile, si usa l’originale: {reason}"
+FOLDER_TIP = "Clip della cartella"
+FOLDER_COUNT = "{count} clip nella cartella"
+DETAIL_LABELS = {
+    "length": "Durata",
+    "resolution": "Risoluzione",
+    "fps": "Fotogrammi",
+    "codec": "Codec",
+    "audio": "Tracce audio",
+    "size": "Peso",
+    "date": "Data",
+}

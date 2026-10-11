@@ -13,12 +13,6 @@ def format_time(seconds: float, decimals: int = 2) -> str:
     return text
 
 
-def format_duration(seconds: float) -> str:
-    if round(seconds, 2) < 60:
-        return f"{max(0.0, seconds):.2f} s".replace(".", ",")
-    return format_time(seconds)
-
-
 def format_span(seconds: float) -> str:
     """Compact length for the zoom readout."""
     if seconds < 10:
@@ -26,3 +20,9 @@ def format_span(seconds: float) -> str:
     if seconds < 60:
         return f"{seconds:.1f} s".replace(".", ",")
     return format_time(seconds, 0)
+
+
+def format_length(seconds: float) -> str:
+    """A length in whole seconds: 10 s under a minute, 4:12 from there on."""
+    whole = round(max(0.0, seconds))
+    return f"{whole} s" if whole < 60 else format_time(whole, 0)

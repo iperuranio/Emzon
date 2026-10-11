@@ -33,7 +33,9 @@ Le registrazioni di NVIDIA ShadowPlay durano spesso minuti, ma quello che intere
 | `1` … `9` | Silenzia o riattiva una traccia |
 | `Ctrl` + `O` | Apri un file |
 
-Sulla timeline la rotellina zooma attorno al cursore, `Maiusc` + rotellina scorre, un clic sposta la testina senza avviare la riproduzione.
+Sulla timeline la rotellina zooma attorno al cursore, `Maiusc` + rotellina o la rotella premuta spostano la vista, un clic sposta la testina senza avviare la riproduzione. Le linee di taglio si trascinano e il tasto destro le toglie.
+
+L'anteprima può girare a 1/2, 1/4 o 1/8 della risoluzione per una riproduzione più fluida: Emzon ne prepara una copia leggera in background, mentre gli export usano sempre l'originale. Il pannello a sinistra mostra le clip della cartella e i dati di quella aperta.
 
 ### Installazione
 

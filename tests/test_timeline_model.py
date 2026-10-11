@@ -119,3 +119,29 @@ def test_follow_pages_forward_when_the_playhead_leaves_the_view():
 def test_rejects_empty_clips(duration):
     with pytest.raises(ValueError):
         Timeline(duration)
+
+
+def test_dragged_cuts_never_cross():
+    t = Timeline(300, fps=60)
+    t.set_cut_out(100)
+    t.set_cut_in(150)
+    assert t.cut_in == pytest.approx(100 - 1 / 60)
+    t.set_cut_out(10)
+    assert t.cut_out == pytest.approx(t.cut_in + 1 / 60)
+
+
+def test_dragged_cuts_stay_inside_the_file():
+    t = Timeline(300)
+    t.set_cut_in(-5)
+    t.set_cut_out(500)
+    assert (t.cut_in, t.cut_out) == (0, 300)
+
+
+def test_removing_a_cut_restores_that_end():
+    t = Timeline(300)
+    t.set_cut_in(20)
+    t.set_cut_out(40)
+    t.clear_head()
+    assert (t.cut_in, t.cut_out) == (0, 40)
+    t.clear_tail()
+    assert (t.cut_in, t.cut_out) == (0, 300)

@@ -18,10 +18,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from emzon import settings
+from emzon import __version__, settings
 from emzon.export.jobs import AudioFormat
 from emzon.ui import strings, theme
-from emzon.ui.widgets import IconButton
+from emzon.ui.widgets import PreviewButton
 
 
 class Segmented(QWidget):
@@ -77,18 +77,9 @@ class SettingsDialog(QDialog):
         self.setStyleSheet(f"QDialog {{ background: {theme.PANEL.name()}; }}")
 
         column = QVBoxLayout(self)
-        column.setContentsMargins(28, 20, 20, 28)
+        column.setContentsMargins(28, 12, 28, 24)
         column.setSpacing(10)
 
-        top = QHBoxLayout()
-        title = QLabel(strings.SETTINGS)
-        title.setFont(theme.ui_font(18, QFont.Weight.DemiBold))
-        close = IconButton("close", strings.CLOSE)
-        close.clicked.connect(self.accept)
-        top.addWidget(title, 1)
-        top.addWidget(close)
-        column.addLayout(top)
-        column.addSpacing(8)
 
         self.destination = Segmented([strings.DESTINATION_BESIDE, strings.DESTINATION_FOLDER])
         self.destination.changed.connect(self._destination_changed)
@@ -117,6 +108,16 @@ class SettingsDialog(QDialog):
         self.audio.changed.connect(self._audio_changed)
         self._section(column, strings.AUDIO_FORMAT, self.audio)
 
+        self.preview = Segmented([PreviewButton.label(scale) for scale in settings.PREVIEW_SCALES], [strings.PREVIEW_TIP] * 4)
+        self.preview.changed.connect(self._preview_changed)
+        self._section(column, strings.PREVIEW_RESOLUTION, self.preview)
+
+        column.addSpacing(24)
+        about = QLabel(strings.ABOUT.format(version=__version__, author=strings.AUTHOR))
+        about.setStyleSheet(f"color: {theme.FAINT.name()};")
+        about.setFont(theme.ui_font(12))
+        column.addWidget(about)
+
         self._show()
 
     def _section(self, column: QVBoxLayout, title: str, control: QWidget) -> None:
@@ -136,6 +137,7 @@ class SettingsDialog(QDialog):
             self.folder_label.setToolTip(str(p.export_folder))
         self.mode.select(1 if p.replace_original else 0)
         self.audio.select(self.formats.index(p.audio_format))
+        self.preview.select(settings.PREVIEW_SCALES.index(p.preview_scale))
 
     def _commit(self) -> None:
         settings.save(self.preferences)
@@ -166,4 +168,8 @@ class SettingsDialog(QDialog):
 
     def _audio_changed(self, index: int) -> None:
         self.preferences.audio_format = self.formats[index]
+        self._commit()
+
+    def _preview_changed(self, index: int) -> None:
+        self.preferences.preview_scale = settings.PREVIEW_SCALES[index]
         self._commit()

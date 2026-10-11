@@ -22,6 +22,8 @@ ICONS = {
     "speaker-off": (_STROKE, '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9l5 6M21 9l-5 6"/>'),
     "chevron-left": (_STROKE, '<path d="M15 18l-6-6 6-6"/>'),
     "chevron-right": (_STROKE, '<path d="M9 18l6-6-6-6"/>'),
+    "chevron-down": (_STROKE, '<path d="M6 9l6 6 6-6"/>'),
+    "sidebar": (_STROKE, '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>'),
     "sliders": (_STROKE, '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
     "wave": (_STROKE, '<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/>'),
     "film": (_STROKE, '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14"/>'),

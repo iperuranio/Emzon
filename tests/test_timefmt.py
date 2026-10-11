@@ -1,6 +1,6 @@
 import pytest
 
-from emzon.timefmt import format_duration, format_span, format_time
+from emzon.timefmt import format_span, format_time
 
 
 @pytest.mark.parametrize(
@@ -15,11 +15,13 @@ def test_format_time_without_decimals():
     assert format_time(300, 0) == "5:00"
 
 
-@pytest.mark.parametrize(("seconds", "expected"), [(10, "10,00 s"), (0.5, "0,50 s"), (75.25, "1:15,25")])
-def test_format_duration(seconds, expected):
-    assert format_duration(seconds) == expected
-
-
 @pytest.mark.parametrize(("seconds", "expected"), [(4.5, "4,50 s"), (12.04, "12,0 s"), (300, "5:00")])
 def test_format_span(seconds, expected):
     assert format_span(seconds) == expected
+
+
+@pytest.mark.parametrize(("seconds", "expected"), [(10.4, "10 s"), (0.3, "0 s"), (59.6, "1:00"), (300.2, "5:00"), (3725, "62:05")])
+def test_format_length(seconds, expected):
+    from emzon.timefmt import format_length
+
+    assert format_length(seconds) == expected
