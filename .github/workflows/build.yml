@@ -70,6 +70,22 @@ jobs:
           Get-Content self-test.json
           if ($process.ExitCode -ne 0) { exit 1 }
 
+      # What Nexus does before an update: --quit with nothing open exits at once,
+      # and with Emzon open it closes the open copy.
+      - name: Quit test
+        shell: pwsh
+        run: |
+          $exe = "dist\Emzon\Emzon.exe"
+          $alone = Start-Process -FilePath $exe -ArgumentList "--quit" -PassThru
+          if (-not $alone.WaitForExit(15000) -or $alone.ExitCode -ne 0) { Write-Error "--quit with nothing open did not exit cleanly"; exit 1 }
+          $app = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 10
+          if ($app.HasExited) { Write-Error "Emzon did not stay open (exit code $($app.ExitCode))"; exit 1 }
+          $quit = Start-Process -FilePath $exe -ArgumentList "--quit" -PassThru
+          if (-not $quit.WaitForExit(15000) -or $quit.ExitCode -ne 0) { Write-Error "--quit did not exit cleanly"; exit 1 }
+          if (-not $app.WaitForExit(20000)) { Stop-Process -Id $app.Id -Force; Write-Error "the open copy did not close"; exit 1 }
+          Write-Output "the open copy closed with exit code $($app.ExitCode)"
+
       - name: Package
         shell: pwsh
         run: |

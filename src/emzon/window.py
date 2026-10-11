@@ -9,6 +9,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -633,6 +635,18 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         dialog = SettingsDialog(self.preferences, self)
         dialog.exec()
+
+    def can_quit(self) -> bool:
+        """Whether another copy may close this one: never while exports would be lost."""
+        return not self.queue.busy
+
+    def quit_cleanly(self) -> None:
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, QDialog) and widget.isVisible():
+                widget.reject()
+        self.queue_popover.hide()
+        if self.close():
+            QApplication.quit()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self.queue.busy:

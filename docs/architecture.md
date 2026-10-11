@@ -78,6 +78,8 @@ The same folder also becomes `Emzon-Setup.exe` (Inno Setup, `packaging/emzon.iss
 
 A tag `vX.Y.Z` must match `__version__` in `src/emzon/__init__.py`, otherwise the build stops. The release is created with its zip in one step.
 
+The open copy listens on a local channel (`QLocalServer`, a named pipe on Windows, named after the user). `Emzon.exe --quit` opens no window: it asks that copy to close and exits. The open copy closes cleanly, dialogs included, unless an export is running, in which case it stays open. Updaters use this to close the app before replacing it.
+
 On Windows the app keeps a shortcut in `Start Menu\Programs\Metessi` pointing at the running exe, rewritten at start when it is missing or stale, and logs to `%LOCALAPPDATA%\Metessi\Emzon\emzon.log`.
 
 ## Performance

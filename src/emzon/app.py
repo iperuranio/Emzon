@@ -7,6 +7,7 @@ import os
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import QCoreApplication, QTimer
 from PySide6.QtGui import QIcon, QSurfaceFormat
 from PySide6.QtWidgets import QApplication
 
@@ -19,7 +20,18 @@ APP_USER_MODEL_ID = "dev.metessi.emzon"
 ICON = Path(__file__).with_name("ui") / "icon.png"
 
 
+QUIT_FLAG = "--quit"
+
+
 def main() -> int:
+    if QUIT_FLAG in sys.argv:
+        # Ask the open copy to close and leave; no window, no log, no shortcut.
+        from emzon.single import request_quit
+
+        QCoreApplication(sys.argv[:1])
+        request_quit()
+        return 0
+
     # libmpv is looked up on PATH when the player module is imported.
     os.environ["PATH"] = f"{bundled_dir()}{os.pathsep}{os.environ.get('PATH', '')}"
 
@@ -54,7 +66,12 @@ def main() -> int:
 
     from emzon.window import MainWindow
 
+    from emzon.single import InstanceServer
+
     window = MainWindow()
+    server = InstanceServer(window.can_quit, app)
+    server.quit_accepted.connect(lambda: QTimer.singleShot(0, window.quit_cleanly))
+    server.listen()
     window.show()
     arguments = [a for a in sys.argv[1:] if not a.startswith("-")]
     if arguments:
