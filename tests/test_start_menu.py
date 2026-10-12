@@ -7,12 +7,12 @@ import unittest
 from emzon import start_menu
 from emzon.start_menu import Shortcut, ensure_start_menu_shortcut
 
-APP_DATA = "C:\\Users\\claudio\\AppData\\Roaming"
+APP_DATA = "C:\\Users\\user\\AppData\\Roaming"
 PROGRAMS = APP_DATA + "\\Microsoft\\Windows\\Start Menu\\Programs"
 NAME = "Emzon"
 LINK = PROGRAMS + "\\Metessi\\" + NAME + ".lnk"
 OLD_LINK = PROGRAMS + "\\" + NAME + ".lnk"
-EXE = "F:\\SOFTWARES\\Emzon\\Emzon.exe"
+EXE = "C:\\Apps\\Emzon\\Emzon.exe"
 ID = "dev.metessi.emzon"
 
 

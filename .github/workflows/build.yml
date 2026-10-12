@@ -6,10 +6,9 @@ on:
     tags: ["v[0-9]*"]
   workflow_dispatch:
 
-# No Actions artifacts: on a v* tag the build job itself publishes the release, with both files in
-# one call, once every check above has passed (the Nexus release contract, section 3). The artifact
-# storage is one for the whole account: on 2026-10-12 a 513 MB artifact uploaded at every push to
-# main filled it and stopped the releases of every repo.
+# No Actions artifacts: their storage is shared by the whole account and the package is large.
+# On a v* tag the build job itself publishes the release, with both files in one call, once every
+# check above has passed.
 permissions:
   contents: write
 
@@ -77,7 +76,7 @@ jobs:
           Get-Content self-test.json
           if ($process.ExitCode -ne 0) { exit 1 }
 
-      # What Nexus does before an update: --quit with nothing open exits at once,
+      # What an updater does before replacing the files: --quit with nothing open exits at once,
       # and with Emzon open it closes the open copy.
       - name: Quit test
         shell: pwsh
