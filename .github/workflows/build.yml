@@ -6,6 +6,10 @@ on:
     tags: ["v[0-9]*"]
   workflow_dispatch:
 
+# No Actions artifacts: on a v* tag the build job itself publishes the release, with both files in
+# one call, once every check above has passed (the Nexus release contract, section 3). The artifact
+# storage is one for the whole account: on 2026-10-12 a 513 MB artifact uploaded at every push to
+# main filled it and stopped the releases of every repo.
 permissions:
   contents: write
 
@@ -17,7 +21,10 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
+      # The token that writes releases stays out of .git/config: what pip installs cannot read it.
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v6
         with:
@@ -127,26 +134,9 @@ jobs:
           Start-Sleep -Seconds 3
           if ($remove.ExitCode -ne 0 -or (Test-Path (Join-Path $app "Emzon.exe")) -or (Test-Path $shortcut)) { Write-Error "uninstall left files behind"; exit 1 }
 
-      - uses: actions/upload-artifact@v5
-        with:
-          name: Emzon-win-x64
-          path: |
-            dist/Emzon-win-x64.zip
-            dist/Emzon-Setup.exe
-          # Only carries the build to the release job.
-          retention-days: 1
-
-  release:
-    needs: windows
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v5
-        with:
-          name: Emzon-win-x64
-          path: dist
-
       - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
