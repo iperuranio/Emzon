@@ -1,8 +1,11 @@
 name: Build
 
+# A build starts only when asked, never on a push to a branch: by pushing the v<version> tag of a
+# release, or by hand (workflow_dispatch, which builds and checks without publishing). Emzon is
+# Windows only, so the Mac has nothing to build here. The Actions budget is 10 USD a month for every
+# repo of the account (release contract of Nexus, section 3).
 on:
   push:
-    branches: [main]
     tags: ["v[0-9]*"]
   workflow_dispatch:
 
